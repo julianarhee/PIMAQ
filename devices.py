@@ -4,6 +4,8 @@ import time
 from threading import Thread
 from queue import LifoQueue
 import warnings
+import traceback
+import sys
 
 try:
     import pyrealsense2 as rs
@@ -25,12 +27,20 @@ if PySpin is not None:
     import pointgrey_utils as pg
 
 
+try:
+    from pypylon import pylon
+except ImportError as e:
+    print('Pypylon not found, can''t acquire from Basler cameras')
+    pylon = None
+if pylon is not None:
+    import basler_utils as bs
+
 
 class Device:
     def __init__(self, start_t=None,height=None,width=None,save=False,savedir=None,
                 experiment=None, name=None,
                 movie_format='hdf5',metadata_format='hdf5', uncompressed=False,
-                preview=False,verbose=False, codec='MJPG'):
+                preview=False,verbose=False, codec='MJPG', asynchronous=True):
         # print('Initializing %s' %name)
         # self.config = config
         # self.serial = serial
@@ -48,6 +58,7 @@ class Device:
         self.height = height
         self.width = width
         self.codec = codec
+        self.asynchronous = asynchronous
 
         if movie_format == 'hdf5':
             ending = '.h5'
@@ -66,7 +77,7 @@ class Device:
 
             self.writer_obj = VideoWriter(filename=os.path.join(self.directory, name + ending), 
                 height=self.height, width=self.width, fps=30, verbose=self.verbose, 
-                movie_format=movie_format, filetype=filetype, 
+                movie_format=movie_format, filetype=filetype,  asynchronous=self.asynchronous
                 )    
 
     def process(self):
@@ -79,7 +90,8 @@ class Device:
 
     def initialize_preview(self):
         # cv2.namedWindow(self.name, cv2.WINDOW_NORMAL)
-        cv2.namedWindow(self.name, cv2.WINDOW_AUTOSIZE)
+        print("New window: %s" % self.name)
+        cv2.namedWindow(self.name, cv2.WINDOW_NORMAL) #AUTOSIZE)
         self.font = cv2.FONT_HERSHEY_SIMPLEX
         self.latest_frame = None
         self.preview_queue = LifoQueue(maxsize=5)
@@ -103,14 +115,14 @@ class Device:
             # frame should be processed, so a single RGB image
             # out = np.vstack((left,right))
             h, w, c = frame.shape
-            if self.save:
-                frame = cv2.resize(frame, (w//2,h//2),cv2.INTER_NEAREST)
-                out_height = h//2
-            else:
-                frame = cv2.resize(frame, (w,h),cv2.INTER_NEAREST)
-                out_height = h//3*2
-            # frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
-                    
+#            if self.save:
+#                frame = cv2.resize(frame, (w//2,h//2),cv2.INTER_NEAREST)
+#                out_height = h//2
+#            else:
+#                frame = cv2.resize(frame, (w,h),cv2.INTER_NEAREST)
+#                out_height = h//3*2
+#            # frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
+            out_height=h                    
             # string = '%.4f' %(time_acq*1000)
             string = '%s:%07d' %(self.name, count)
             cv2.putText(frame,string,(10,out_height-20), self.font, 0.5,(0,0,255),2,cv2.LINE_AA)
@@ -141,32 +153,40 @@ class Device:
 
     def stop(self):
         # if self.preview:
-        if not self.started:
-            return
-        self.stop_streaming()
-        if self.preview:
-            self.preview_queue.put(None)
-            self.preview_thread.join()
-            cv2.destroyWindow(self.name)
-        if hasattr(self, 'writer_obj'):
-            self.writer_obj.stop()
-            del self.writer_obj
-
-            # del(self.videoobj)
-        if hasattr(self, 'metadata_obj'):
-            # print('fileobj')
-            self.metadata_obj.close()
-        
-        self.started = False
-        print('Cam %s stopped' %self.name) 
+        print('stopping', self.name)
+        try:
+            if not self.started:
+                print("devices: not started", self.name)
+                return
+            self.stop_streaming()
+            if self.preview:
+                self.preview_queue.put(None)
+                self.preview_thread.join()
+                cv2.destroyWindow(self.name)
+            if hasattr(self, 'writer_obj'):
+                self.writer_obj.stop()
+                print("closed writer")
+                del self.writer_obj
+                # del(self.videoobj)
+            if hasattr(self, 'metadata_obj'):
+                print('fileobj')
+                self.metadata_obj.close()
+                print('[devices - filewriter stopped]') 
+                del self.metadata_obj
+            self.started = False
+            print('Cam %s stopped' %self.name) 
+        except Exception as e:
+            print(e)
 
     def __del__(self):
         try:
             self.stop()
         except BaseException as e:
             if self.verbose:
-                print('Error in destructor of cam %s' %self.name)
                 print(e)
+                #print(dir(self))
+                #print('Error in destructor of cam %s' % self.name)
+                #print(e)
             else:
                 pass
 
@@ -471,7 +491,8 @@ class PointGrey(Device):
                   'AcquisitionFrameRate': 60.0,
                   'GainAuto': 'Off',
                   'Gain': 10.0,
-                  'SharpnessAuto': 'Off'}
+                  'SharpnessAuto': 'Off'
+            }
         if strobe is None:
             strobe = {
             'line': 2,
@@ -604,3 +625,286 @@ class PointGrey(Device):
                 print(e)
             else:
                 pass
+
+
+#%%
+
+class Basler(Device):
+    def __init__(self,serial,
+                 start_t=None,options=None,save=False,savedir=None,experiment=None, name=None,
+        movie_format='opencv', metadata_format='hdf5', uncompressed=False,preview=False,verbose=False,
+        strobe=None,codec='libx264', max_cams=2, duration=np.inf, acquisition_rate=10):
+
+        self.duration_sec =  duration*60.0
+        self.acquisition_rate = acquisition_rate
+
+
+        self.verbose=verbose
+        # use these options to override input width and height
+        # Retrieve singleton reference to system object
+        #system = PySpin.System.GetInstance()
+        tlFactory = pylon.TlFactory.GetInstance()
+        #devices = tlFactory.EnumerateDevices()
+
+        # now that we have width and height, call the constructor for the superclass!
+        # we'll inherit all attributes and methods from the Device class
+        # have to double the width in this constructor because we're gonna save the left 
+        # and right images concatenated horizontally
+        super().__init__(start_t,options['Height'], options['Width'], save, savedir, experiment, name, 
+                        movie_format, metadata_format, uncompressed,preview, verbose,codec)
+
+        version = pylon.__version__ #system.GetLibraryVersion()
+        
+        if self.verbose:
+            print('Library version: %s' % version)
+
+        # Retrieve list of cameras from the system
+        #cam_list = pylon.InstantCameraArray(min(len(devices), max_cams))
+        #num_cameras = cam_list.GetSize()
+        #if verbose:
+        #    print('Number of cameras detected: %d' % num_cameras)
+
+        self.cam = None
+        info = pylon.DeviceInfo()
+        info.SetSerialNumber(str(serial))
+        self.cam  = pylon.InstantCamera(pylon.TlFactory.GetInstance().CreateFirstDevice(info))
+#        self.cam = None
+#        for ix, c in enumerate(cam_list):
+#            c.Attach(tlFactory.CreateDevice(devices[ix]))
+#            this_serial = c.DeviceInfo.GetSerialNumber() #py.get_serial_number(c)
+#            if int(this_serial) == int(serial):
+#                self.cam = c
+        if self.cam is None:
+            raise ValueError('Didn''t find serial! %s' %serial)
+        #cam_list.Clear()
+        #self.cam.Attach(tlFactory.CreateDevice(devices[ix]))
+        self.cam.Open() #self.cam.Init()
+        self.compute_timestamp_offset()
+
+        self.nodemap = self.cam.GetNodeMap()
+        self.serial = serial
+        print("Serial: ", serial)
+        # self.cam = cam
+        self.system = tlFactory
+        if self.save:
+            self.initialize_metadata_saving_hdf5()
+        
+        if options is None:
+            # Note: modify these at your own risk! Don't change the order!
+            # many have dependencies that are hard to figure out, so the order matters.
+            # For example, ExposureAuto must be set to Off before ExposureTime can be changed. 
+            options = {
+                  'AcquisitionMode': 'Continuous', # can capture one frame or multiple frames as well
+                  'ExposureAuto': 'Off', # manually set exposure
+                  'ExposureMode': 'Timed', 
+                  'ExposureTime': 68295.0, #1000.0, # in microseconds, so 1000 = 1ms
+                  # this downsamples image in half, enabling faster framerates
+                  # it's not possible to change BinningHorizontal, but it is automatically changed by changing
+                  # BinningVertical
+                  'BinningVertical': 1, 
+                  'Height': 1200, # max 1024 if Binning=1, else 512
+                  'Width': 1920, # max 1280 if Binning=1, else 640
+                  'OffsetX': 0, # left value of ROI
+                  'OffsetY': 0, # right value of ROI
+                  'PixelFormat': 'Mono8',
+                  #'AcquisitionFrameRateAuto': 'Off',
+                  'AcquisitionFrameRate': 10.0,
+                  'GainAuto': 'Off',
+                  'Gain': 1.0,
+                  #'SharpnessAuto': 'Off'
+            } #set_camera_properties(options)
+        if strobe is None:
+            strobe = {
+            'line': 2,
+            'duration': 0.0
+            }
+        self.options = options
+        self.strobe = strobe
+        #self.update_settings()
+        #self.start()
+
+        print("Created Basler object")
+
+
+    def compute_timestamp_offset(self):
+        self.cam.TimestampLatch.Execute()
+        self.timestamp_offset = time.perf_counter() - self.cam.TimestampLatchValue.GetValue()*1e-9 - self.start_t
+
+    def cleanup_powerup_state(self):
+        ''' TODO:  make entry for UserSet1 (supports up to 3?)
+        '''
+        self.cam.UserSetSelector.SetValue('Default')
+        self.UserSetLoad.Execute()
+
+
+    def process(self, frame):
+        # t0 = time.perf_counter()
+        out = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
+        # print('process t: %.6f' %( (time.perf_counter() - t0)*1000 ))
+        return(out)
+    
+    def start(self, sync_mode=None):
+        print("here")
+        self.update_settings()
+        #self.cam.Open()
+        self.cam.AcquisitionStart.Execute() #BeginAcquisition()
+        self.cam.StartGrabbing(pylon.GrabStrategy_OneByOne)
+        print("Started cam acquisition")
+        if self.save:
+            # self.initialize_saving()
+            print('devices: started, saving initialized - %s' %self.name)
+        if self.preview:
+            self.initialize_preview()
+        self.started= True
+        self.start_timer = time.perf_counter()
+
+    def update_settings(self):
+        """ Updates PointGrey camera settings.
+        Attributes, types, and range of possible values for each attribute are available
+        in the camera documentation. 
+        These are extraordinarily tricky! Order matters! For exampple, ExposureAuto must be set
+        to Off before ExposureTime can be set. 
+        """
+        print("-updating settings-")
+        for key, value in self.options.items():
+            print(key, value)
+            bs.set_value(self.nodemap, key, value)
+        # changing strobe involves multiple variables in the correct order, so I've bundled
+        # them into this function
+        bs.turn_strobe_on(self.nodemap, self.strobe['line']) #, strobe_duration=self.strobe['duration'])
+
+    def loop(self, timeout_time=5000):
+        print("looping - %s" % self.name)
+        if not self.started:
+            raise ValueError('Start must be called before loop!')
+        
+        #try:
+        should_continue = self.cam.IsGrabbing() #True
+        while should_continue:
+            image_result = self.cam.RetrieveResult(timeout_time , pylon.TimeoutHandling_ThrowException)
+            if image_result.GetNumberOfSkippedImages():
+                print("Skipped ", image_result.GetNumberOfSkippedImages(), " image.")
+            # GetNextImage()
+#                if image_result.IsIncomplete():
+#                    if self.verbose:
+#                        print('Image incomplete with image status %d ...' 
+#                            % image_result.GetImageStatus())
+#                    continue
+#                else:
+#                    pass
+#                #image_converted = image_result.Convert(PySpin.PixelFormat_Mono8, 
+            #    PySpin.HQ_LINEAR)
+            if image_result.GrabSucceeded():
+                frame = bs.convert_image(image_result)
+                #frame = image_converted.GetNDArray()
+                
+                #frame = self.process(frame)
+                sestime = time.perf_counter() - self.start_t
+                cputime = time.time()
+                framecount =  image_result.ID #GetFrameID()
+                # timestamp is nanoseconds from last time camera was powered off
+                timestamp = image_result.GetTimeStamp()*1e-9 + self.timestamp_offset 
+                # print('standard process time: %.6f' %(time.perf_counter() - start_t))
+                # def write_metadata(self, framecount, timestamp, arrival_time, sestime, cputime):
+                # metadata = (framecount, timestamp, sestime, cputime)
+                if self.save:
+                    self.writer_obj.write(frame)
+                    self.write_metadata(self.serial, framecount, timestamp, sestime, cputime)
+                    # self.save_queue.put_nowait((frame, metadata))
+                image_result.Release()
+
+                # only output every 10th frame for speed
+                # might be unnecessary
+                if self.preview and framecount % 10 ==0:
+                    self.preview_queue.put_nowait((frame,framecount))
+                    if self.latest_frame is not None:
+                        cv2.imshow(self.name, self.latest_frame)
+                        key = cv2.waitKey(1)
+                        if key==27:
+                            break
+            frames = None
+
+            # Break out of the while loop if ESC registered
+            elapsed_time = time.perf_counter() - self.start_timer #exp_start_time
+            key = cv2.waitKey(1)
+            #sync_state = cameras[cameraContextValue].LineStatus.GetValue()
+            #if key == 27 or sync_state is False or (elapsed_time>duration_sec): # ESC
+            if key == 27 or (elapsed_time>self.duration_sec): # ESC
+                #print("Sync:", sync_state)
+                #writerA.close()
+                #writerB.close()
+                print("elapsed:", sestime)
+                print("breaking")
+                break
+            #image_result.Release()
+#        except KeyboardInterrupt:
+#            print('keyboard interrupt')
+#            should_continue = False
+#        except Exception as e:
+#            traceback.print_exc()
+#        finally:
+#            # don't know why I can't put this in the destructor
+            # print(dir(device))
+            # if device.preview:
+            #     device.preview_queue.put(None)
+            #     device.preview_thread.join()
+            # time.sleep(1)
+        self.stop()
+
+    def initialize_metadata_saving_hdf5(self):
+        if not os.path.exists(self.directory):
+            os.makedirs(self.directory)
+            
+        fname = os.path.join(self.directory, self.name + '_metadata.h5')
+        f = h5py.File(fname, 'w')
+
+        dset = f.create_dataset('serial',(0,),maxshape=(None,),dtype=np.int32)
+        dset = f.create_dataset('framecount',(0,),maxshape=(None,),dtype=np.int32)
+        dset = f.create_dataset('timestamp',(0,),maxshape=(None,),dtype=np.float64)
+        dset = f.create_dataset('sestime',(0,),maxshape=(None,),dtype=np.float64)
+        dset = f.create_dataset('cputime',(0,),maxshape=(None,),dtype=np.float64)
+
+        self.metadata_obj = f
+        
+    def write_metadata(self, serial, framecount, timestamp,  sestime, cputime):
+        # t0 = time.perf_counter()
+        append_to_hdf5(self.metadata_obj,'serial', serial)
+        append_to_hdf5(self.metadata_obj,'framecount', framecount)
+        append_to_hdf5(self.metadata_obj,'timestamp', timestamp)
+        append_to_hdf5(self.metadata_obj,'sestime', sestime)
+        append_to_hdf5(self.metadata_obj, 'cputime', cputime)
+
+
+    def stop_streaming(self):
+        # print(dir(self.pipeline))
+#        hang_time = time.time()
+#        nag_time = 0.05
+#        sys.stdout.write('Waiting for disk writer to catch up (this may take a while)...')
+#        sys.stdout.flush()
+#        waits = 0
+#        while not self.writer_obj.save_queue.empty():
+#            now = time.time()
+#            if (now - hang_time) > nag_time:
+#                sys.stdout.write('.')
+#                sys.stdout.flush()
+#                hang_time = now
+#                waits += 1
+#        print(waits)
+#        print("\n")
+
+        try:
+            #self.cam.AcquisitionStop.Execute()
+            self.cam.UserOutputValue.SetValue(False)
+            self.cam.StopGrabbing()
+            #del(self.nodemap)
+            #self.cam.DeInit()
+            self.cam.Close()
+            #del(self.cam)
+            #self.system.ReleaseInstance()
+        except BaseException as e:
+            if self.verbose:
+                print('Probably tried to call stop before a start.')
+                print(e)
+            else:
+                pass
+

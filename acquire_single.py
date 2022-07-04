@@ -1,15 +1,3 @@
-####!/usr/bin/env python3
-# -*- encoding: utf-8 -*-
-'''
-@File    :   record_and_sync_frames.py
-@Time    :   2022/02/01 12:27:07
-@Author  :   julianarhee 
-@Contact :   juliana.rhee@gmail.com
-
-Record frames with Basler (pypylon) with output trigger (audo abt)
-
-'''
-
 try:
     import pyrealsense2 as rs
 except ImportError as e:
@@ -229,7 +217,7 @@ def main():
             procs=[]
             for camname, cam in config['cams'].items():
                 print(camname)
-                #cv2.namedWindow(camname, cv2.WINDOW_NORMAL)
+                cv2.namedWindow(camname, cv2.WINDOW_NORMAL)
                 #time.sleep(2)
                 tup = (config, camname, cam, args, experiment, start_t)
                 p = mp.Process(target=initialize_and_loop, args=(config, camname, cam, args, experiment, start_t, arduino))
@@ -275,7 +263,7 @@ def main():
 #
         print("pool closed")
     else:
-        tuples = [(config, camname, cam, args, experiment, start_t, arduino)]
+        tuples = [(config, camname, cam, args, experiment, start_t)]
         assert len(tuples) == 1
         initialize_and_loop(*tuples[0])
 
@@ -283,8 +271,8 @@ def main():
     cv2.destroyAllWindows()
 
 
-    #arduino.write(b'Q\r')
-    #print('Stopped arduino....')
+    arduino.write(b'Q\r')
+    print('Stopped arduino....')
 
 
 

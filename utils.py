@@ -6,6 +6,10 @@ from queue import Queue, Empty
 from threading import Thread
 from typing import Union
 import os
+import multiprocessing as mp
+import traceback
+import time
+import sys
 
 def initialize_hdf5(filename, framesize=None, codec=None, fps=None):
     base, ext = os.path.splitext(filename)
@@ -184,11 +188,15 @@ class VideoWriter:
             self.write_function = write_frame_directory
         framesize = (self.width, self.height)
 
-        if self.asynchronous:
-            self.save_queue = Queue(maxsize=3000)
-            self.save_thread = Thread(target=self.save_worker, args=(self.save_queue,))
-            self.save_thread.daemon = True
-            self.save_thread.start()
+        try:
+            if self.asynchronous:          
+                self.save_queue = Queue() #mp.Queue() #maxsize=3000)
+                #self.save_thread = mp.Process(target=self.save_worker, args=(self.save_queue,))
+                self.save_thread = Thread(target=self.save_worker, args=(self.save_queue,))
+                self.save_thread.daemon = True
+                self.save_thread.start()
+        except Exception as e:
+            traceback.print_exc()
         self.has_stopped = False
         self.writer_obj = None
 
@@ -209,8 +217,11 @@ class VideoWriter:
                 print(e)
             finally:
                 queue.task_done()
+        #assert(queue.empty())
+        
         if self.verbose:
             print('out of save queue')
+
 
     def write(self, frame: np.ndarray):
         """Writes numpy array to disk"""
@@ -281,17 +292,38 @@ class VideoWriter:
         """Stops writing, closes all open file objects"""
         if self.has_stopped:
             return
+#        hang_time = time.time()
+#        nag_time = 0.05
+#        sys.stdout.write('UTILS:  Waiting for disk writer to catch up (this may take a while)...')
+#        sys.stdout.flush()
+#        waits = 0
+#        while not self.save_queue.empty():
+#            now = time.time()
+#            if (now - hang_time) > nag_time:
+#                sys.stdout.write('.')
+#                sys.stdout.flush()
+#                hang_time = now
+#                waits += 1
+#        print(waits)
+#        print("\n")
+#
         if self.asynchronous:
             # wait for save worker to complete, then finish
+            #if not self.save_queue.empty(): # is not None:
             self.save_queue.put(None)
             if self.verbose:
-                print('joining...')
+                print('joining save_queue...')
             self.save_queue.join()
             if self.verbose:
                 print('joined.')
-            del (self.save_queue)
+            #del (self.save_queue)
+            self.save_thread.join()
+
+        while not self.save_queue.empty():
+            print("WARNING: Not all images saved")
+
         if hasattr(self, 'writer_obj'):
-            # print('videoobj')
+            print('videoobj')
             if self.movie_format == 'opencv':
                 self.writer_obj.release()
             elif self.movie_format == 'hdf5':
@@ -303,6 +335,7 @@ class VideoWriter:
                 self.writer_obj.wait()
                 del (self.writer_obj)
         self.has_stopped = True
+        print("[utils - videowriter stopped (%s)]" % self.filename)
 
     def __del__(self):
         """Destructor"""

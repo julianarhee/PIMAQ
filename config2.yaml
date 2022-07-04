@@ -1,0 +1,45 @@
+experimenter: 'jyr'
+savedir: /home/julianarhee/Videos/basler-pq
+codec: 'libx264' # DIVX has compression artifacts. set to 0 for uncompressed
+# the reason that we have to set these here is that all realsense cameras should be 
+# the same fps and h,w for synchronization + calibration purpose
+# look in realsense_presets.yaml for good examples
+basler_options:
+  Width: 1920
+  Height: 1200
+  Framerate: 15
+  emitter_enabled: 1 # must be 1 or 0, not true / false
+  Exposure: 68295.0
+  Gain: 1
+  Uncompressed: False
+cams:
+  left_top: 
+    type: Basler
+    master: False
+    serial: 22297042 
+    # set options to none to use default
+    options:
+      # note: modify these at your own risk! don't change the order!
+      # many have dependencies that are hard to figure out, so the order matters.
+      # for example, exposureauto must be set to off before exposuretime can be changed. 
+      AcquisitionMode: 'Continuous' # can capture one frame or multiple frames as well
+      ExposureAuto: 'Off' # manually set exposure
+      ExposureMode: 'Timed'
+      ExposureTime: 68295.0 #1000.0 # in microseconds, so 1000 = 1ms
+      # this downsamples image in half, enabling faster framerates
+      # it's not possible to change binninghorizontal, but it is automatically changed by changing
+      # binningvertical
+      BinningVertical: 1
+      Height: 1200 # max 1024 if binning=1, else 512
+      Width: 1920 # max 1280 if binning=1, else 640
+      OffsetX: 0 # left value of roi
+      OffsetY: 0 # top value of roi
+      PixelFormat: Mono8
+      #AcquisitionFrameRateAuto: Off
+      AcquisitionFrameRate: 15.0
+      GainAuto: 'Off'
+      Gain: 1.0
+      #SharpnessAuto: 'Off'
+    strobe:
+      line: 4
+      duration: 0.0
