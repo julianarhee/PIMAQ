@@ -263,7 +263,7 @@ def main():
 #
         print("pool closed")
     else:
-        tuples = [(config, camname, cam, args, experiment, start_t)]
+        tuples = [(config, camname, cam, args, experiment, start_t, arduino)]
         assert len(tuples) == 1
         initialize_and_loop(*tuples[0])
 

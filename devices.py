@@ -76,8 +76,8 @@ class Device:
                 filetype = '.png'
 
             self.writer_obj = VideoWriter(filename=os.path.join(self.directory, name + ending), 
-                height=self.height, width=self.width, fps=30, verbose=self.verbose, 
-                movie_format=movie_format, filetype=filetype,  asynchronous=self.asynchronous
+                height=self.height, width=self.width, fps=20, verbose=self.verbose, 
+                movie_format=movie_format, filetype=filetype, asynchronous=self.asynchronous
                 )    
 
     def process(self):
@@ -158,23 +158,24 @@ class Device:
             if not self.started:
                 print("devices: not started", self.name)
                 return
-            self.stop_streaming()
+            self.stop_streaming() # stop camera stuff
             if self.preview:
                 self.preview_queue.put(None)
                 self.preview_thread.join()
                 cv2.destroyWindow(self.name)
-            if hasattr(self, 'writer_obj'):
-                self.writer_obj.stop()
-                print("closed writer")
-                del self.writer_obj
-                # del(self.videoobj)
+                print("...closed preview")
             if hasattr(self, 'metadata_obj'):
-                print('fileobj')
+                #print('fileobj')
                 self.metadata_obj.close()
                 print('[devices - filewriter stopped]') 
                 del self.metadata_obj
+                print("...closed meta writer")
+            if hasattr(self, 'writer_obj'):
+                self.writer_obj.stop()
+                del self.writer_obj
+                print("...closed writer")
             self.started = False
-            print('Cam %s stopped' %self.name) 
+            print('Devices stopped - %s' %self.name) 
         except Exception as e:
             print(e)
 
@@ -767,7 +768,7 @@ class Basler(Device):
         """
         print("-updating settings-")
         for key, value in self.options.items():
-            print(key, value)
+            #print(key, value)
             bs.set_value(self.nodemap, key, value)
         # changing strobe involves multiple variables in the correct order, so I've bundled
         # them into this function
@@ -779,49 +780,44 @@ class Basler(Device):
             raise ValueError('Start must be called before loop!')
         
         #try:
+        if self.cam.GetGrabResultWaitObject().Wait(0):
+            print("grab results waiting")
         should_continue = self.cam.IsGrabbing() #True
-        while should_continue:
-            image_result = self.cam.RetrieveResult(timeout_time , pylon.TimeoutHandling_ThrowException)
-            if image_result.GetNumberOfSkippedImages():
-                print("Skipped ", image_result.GetNumberOfSkippedImages(), " image.")
-            # GetNextImage()
-#                if image_result.IsIncomplete():
-#                    if self.verbose:
-#                        print('Image incomplete with image status %d ...' 
-#                            % image_result.GetImageStatus())
-#                    continue
-#                else:
-#                    pass
-#                #image_converted = image_result.Convert(PySpin.PixelFormat_Mono8, 
-            #    PySpin.HQ_LINEAR)
-            if image_result.GrabSucceeded():
-                frame = bs.convert_image(image_result)
-                #frame = image_converted.GetNDArray()
-                
-                #frame = self.process(frame)
-                sestime = time.perf_counter() - self.start_t
-                cputime = time.time()
-                framecount =  image_result.ID #GetFrameID()
-                # timestamp is nanoseconds from last time camera was powered off
-                timestamp = image_result.GetTimeStamp()*1e-9 + self.timestamp_offset 
-                # print('standard process time: %.6f' %(time.perf_counter() - start_t))
-                # def write_metadata(self, framecount, timestamp, arrival_time, sestime, cputime):
-                # metadata = (framecount, timestamp, sestime, cputime)
-                if self.save:
-                    self.writer_obj.write(frame)
-                    self.write_metadata(self.serial, framecount, timestamp, sestime, cputime)
-                    # self.save_queue.put_nowait((frame, metadata))
-                image_result.Release()
+        timeout_time=500
+        while self.cam.IsGrabbing(): #should_continue:
+            image_result = self.cam.RetrieveResult(timeout_time, pylon.TimeoutHandling_Return) #, pylon.TimeoutHandling_ThrowException)
+            #if (image_result.GetNumberOfSkippedImages()):
+            #    print("Skipped ", image_result.GetNumberOfSkippedImages(), " image.")
+            if image_result is None: #not image_result.GrabSucceeded():
+                continue
+                #pass
+            #if image_result.GrabSucceeded():
+            frame = bs.convert_image(image_result)
+            #frame = image_converted.GetNDArray()                
+            #frame = self.process(frame)
+            sestime = time.perf_counter() - self.start_t
+            cputime = time.time()
+            framecount =  image_result.ID #GetFrameID()
+            # timestamp is nanoseconds from last time camera was powered off
+            timestamp = image_result.GetTimeStamp()*1e-9 + self.timestamp_offset 
+            # print('standard process time: %.6f' %(time.perf_counter() - start_t))
+            # def write_metadata(self, framecount, timestamp, arrival_time, sestime, cputime):
+            # metadata = (framecount, timestamp, sestime, cputime)
+            if self.save:
+                self.writer_obj.write(frame) # send frame to save_queue
+                self.write_metadata(self.serial, framecount, timestamp, sestime, cputime)
+                # self.save_queue.put_nowait((frame, metadata))
+            image_result.Release()
 
-                # only output every 10th frame for speed
-                # might be unnecessary
-                if self.preview and framecount % 10 ==0:
-                    self.preview_queue.put_nowait((frame,framecount))
-                    if self.latest_frame is not None:
-                        cv2.imshow(self.name, self.latest_frame)
-                        key = cv2.waitKey(1)
-                        if key==27:
-                            break
+            # only output every 10th frame for speed
+            # might be unnecessary
+            if self.preview and framecount % 5 ==0:
+                self.preview_queue.put_nowait((frame,framecount))
+                if self.latest_frame is not None:
+                    cv2.imshow(self.name, self.latest_frame)
+            key = cv2.waitKey(1)
+            if key==27:
+                break
             frames = None
 
             # Break out of the while loop if ESC registered

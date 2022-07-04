@@ -1,6 +1,6 @@
 #!/bin/sh
 
-python acquire.py -c ./config.yaml -s -p
-python acquire.py -c ./config2.yaml -s -p
-python arduino.py /:wq
+python acquire_single.py -c ./config.yaml -s -p
+python acquire_single.py -c ./config2.yaml -s -p
+python arduino.py
 

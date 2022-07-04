@@ -190,7 +190,7 @@ class VideoWriter:
 
         try:
             if self.asynchronous:          
-                self.save_queue = Queue() #mp.Queue() #maxsize=3000)
+                self.save_queue = mp.Queue() #mp.Queue() #maxsize=3000)
                 #self.save_thread = mp.Process(target=self.save_worker, args=(self.save_queue,))
                 self.save_thread = Thread(target=self.save_worker, args=(self.save_queue,))
                 self.save_thread.daemon = True
@@ -201,22 +201,23 @@ class VideoWriter:
         self.writer_obj = None
 
     def save_worker(self, queue):
-        """Worker for asychronously writing video to disk"""
-        should_continue = True
-        while should_continue:
+        """Worker for asychronously writing video to disk
+        Get results from save_queue, then write it (give it to VideoWriter)"""
+        while True:
             try:
-                item = queue.get()
+                item = queue.get() #queue.get()
                 if item is None:
                     if self.verbose:
                         print('Saver stop signal received')
-                    should_continue = False
                     break
                 self.write_frame(item)
-                # print(queue.qsize())
+                #self.write(item)
+                #print(queue.qsize())
             except Exception as e:
-                print(e)
-            finally:
-                queue.task_done()
+                print("Error in save_worker:")
+                traceback.print_exc()
+            #finally:
+            #    queue.task_done()
         #assert(queue.empty())
         
         if self.verbose:
@@ -224,14 +225,17 @@ class VideoWriter:
 
 
     def write(self, frame: np.ndarray):
-        """Writes numpy array to disk"""
+        """Writes numpy array to disk. 
+        Either put result into queue, or call write_frame() to send frame to VidoWriter"""
         if self.asynchronous:
-            self.save_queue.put(frame)
+            self.save_queue.put(frame) 
+            # called by device when image grabbed
         else:
             self.write_frame(frame)
 
     def write_frame(self, frame: np.ndarray):
-        """Writes numpy array to disk. Doesn't happen in background thread: for that use `write`
+        """Writes numpy array to disk. 
+        Doesn't happen in background thread: for that use `write`
 
         Args:
             frame: numpy ndarray of shape (H,W,C) or (H,W). channel will be added in the case of a 2D array
@@ -312,18 +316,15 @@ class VideoWriter:
             #if not self.save_queue.empty(): # is not None:
             self.save_queue.put(None)
             if self.verbose:
-                print('joining save_queue...')
-            self.save_queue.join()
-            if self.verbose:
-                print('joined.')
+                print('None to save_queue...')
+            #self.save_queue.join()
             #del (self.save_queue)
+            if not self.save_queue.empty():
+                print("WARNING: Not all images saved")
             self.save_thread.join()
 
-        while not self.save_queue.empty():
-            print("WARNING: Not all images saved")
-
         if hasattr(self, 'writer_obj'):
-            print('videoobj')
+            #print('videoobj')
             if self.movie_format == 'opencv':
                 self.writer_obj.release()
             elif self.movie_format == 'hdf5':

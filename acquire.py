@@ -137,12 +137,9 @@ def initialize_and_loop(config, camname, cam, args, experiment, start_t, arduino
     #print("STARTED DEVICE")
     # runs until keyboard interrupt!
     arduino.write(b'S%d\r' % args.frame_rate)   
-    time.sleep(1)
-
+    time.sleep(1)   
+    print("arduino started")
     device.loop()
-
-    print("out of loop")
-
     #return camname, cam['serial']   
 
 def main():
