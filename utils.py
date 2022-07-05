@@ -61,8 +61,10 @@ def initialize_ffmpeg(filename,framesize, codec=None, fps:float=30.0):
         '-r', fps, # frames per second
         '-i', '-', # The imput comes from a pipe
         '-an', # Tells FFMPEG not to expect any audio
-        '-vcodec', 'libx264',
-        '-crf', '17', 
+        #'-vcodec', 'h264_nvenc', #'libx264',
+        '-c:v', 'h264_nvenc',
+        #'-crf', '17', 
+        '-b:v', '5M',
         filename]
     # if you want to print to the command line, change stderr to sp.STDOUT
     pipe = sp.Popen( command, stdin=sp.PIPE, stderr=sp.DEVNULL)
@@ -84,6 +86,14 @@ def write_frame_ffmpeg(pipe, frame):
 def append_to_hdf5(f, name, value, axis=0):
     f[name].resize(f[name].shape[axis]+1, axis=axis)
     f[name][-1]=value
+
+def append_to_csv(f, serial, framecount, frameid, timestamp, sestime, cputime):
+#    append_to_hdf5(self.metadata_obj,'framecount', framecount)
+#    append_to_hdf5(self.metadata_obj,'timestamp', timestamp)
+#    append_to_hdf5(self.metadata_obj,'arrival_time', arrival_time)
+#    append_to_hdf5(self.metadata_obj,'sestime', sestime)
+#    append_to_hdf5(self.metadata_obj, 'cputime', cputime)
+   f.write(','.join([str(s) for s in [serial, framecount, frameid, timestamp, sestime, cputime]]) + '\n')
 
 class DirectoryWriter:
     def __init__(self, directory, filetype, fnum:int=0):
@@ -174,6 +184,8 @@ class VideoWriter:
         self.verbose = verbose
         self.asynchronous = asynchronous
 
+        self.writer_obj = None
+
         if movie_format == 'hdf5':
             self.initialization_func = initialize_hdf5
             self.write_function = write_frame_hdf5
@@ -188,17 +200,15 @@ class VideoWriter:
             self.write_function = write_frame_directory
         framesize = (self.width, self.height)
 
-        try:
-            if self.asynchronous:          
-                self.save_queue = mp.Queue() #mp.Queue() #maxsize=3000)
-                #self.save_thread = mp.Process(target=self.save_worker, args=(self.save_queue,))
-                self.save_thread = Thread(target=self.save_worker, args=(self.save_queue,))
-                self.save_thread.daemon = True
-                self.save_thread.start()
-        except Exception as e:
-            traceback.print_exc()
+        if self.asynchronous:          
+            self.save_queue = mp.Queue(maxsize=3000) #mp.Queue() #maxsize=3000)
+            #self.save_thread = mp.Process(target=self.save_worker, args=(self.save_queue,))
+            self.save_thread = Thread(target=self.save_worker, args=(self.save_queue,))
+            self.save_thread.daemon = True
+            self.save_thread.start()
+            print("Started save thread: ", self.save_thread)
+        
         self.has_stopped = False
-        self.writer_obj = None
 
     def save_worker(self, queue):
         """Worker for asychronously writing video to disk
@@ -206,13 +216,14 @@ class VideoWriter:
         while True:
             try:
                 item = queue.get() #queue.get()
+                #print("pre:", queue.qsize())
                 if item is None:
                     if self.verbose:
                         print('Saver stop signal received')
                     break
                 self.write_frame(item)
                 #self.write(item)
-                #print(queue.qsize())
+                #print("post:", queue.qsize())
             except Exception as e:
                 print("Error in save_worker:")
                 traceback.print_exc()
@@ -296,21 +307,7 @@ class VideoWriter:
         """Stops writing, closes all open file objects"""
         if self.has_stopped:
             return
-#        hang_time = time.time()
-#        nag_time = 0.05
-#        sys.stdout.write('UTILS:  Waiting for disk writer to catch up (this may take a while)...')
-#        sys.stdout.flush()
-#        waits = 0
-#        while not self.save_queue.empty():
-#            now = time.time()
-#            if (now - hang_time) > nag_time:
-#                sys.stdout.write('.')
-#                sys.stdout.flush()
-#                hang_time = now
-#                waits += 1
-#        print(waits)
-#        print("\n")
-#
+
         if self.asynchronous:
             # wait for save worker to complete, then finish
             #if not self.save_queue.empty(): # is not None:
@@ -320,10 +317,28 @@ class VideoWriter:
             #self.save_queue.join()
             #del (self.save_queue)
             if not self.save_queue.empty():
+                print(self.save_queue.qsize())
                 print("WARNING: Not all images saved")
-            self.save_thread.join()
+            #self.save_thread.stop()
+            #self.save_thread.join()
+            #print("Save Thread: ", )
+#        hang_time = time.perf_counter()
+#        nag_time = 0.05
+#        sys.stdout.write('UTILS:  Waiting for disk writer to catch up (this may take a while)...')
+#        sys.stdout.flush()
+#        waits = 0
+#        while not self.save_queue.empty():
+#            now = time.perf_counter()
+#            if (now - hang_time) > nag_time:
+#                sys.stdout.write('.')
+#                sys.stdout.flush()
+#                hang_time = now
+#                waits += 1
+#        print(waits)
+#        print("\n")
+#
 
-        if hasattr(self, 'writer_obj'):
+        if hasattr(self, 'writer_obj') and self.writer_obj is not None:
             #print('videoobj')
             if self.movie_format == 'opencv':
                 self.writer_obj.release()
