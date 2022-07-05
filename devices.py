@@ -9,7 +9,7 @@ import traceback
 import sys
 import multiprocessing as mp
 
-
+import tables
 try:
     import pyrealsense2 as rs
 except ImportError as e:
@@ -44,7 +44,7 @@ class Device:
                 experiment=None, name=None,
                 movie_format='hdf5',metadata_format='hdf5', uncompressed=False,
                 preview=False,verbose=False, codec='MJPG', asynchronous=True,
-                acquisition_fps=30., videowrite_fps=None):
+                acquisition_fps=30., videowrite_fps=None, report_period=10):
         # print('Initializing %s' %name)
         # self.config = config
         # self.serial = serial
@@ -200,11 +200,12 @@ class Device:
 
     def stop(self):
         # if self.preview:
-        print('stopping', self.name)
+        print("----------stopping-------------------")
+        print('- name: %s' % self.name)
         if hasattr(self, 'arduino'):
             self.arduino.write(b'Q\r')
-            self.arduino.close()
-            
+            self.arduino.close()        
+            print('- closed arduino')
         try:
             if not self.started:
                 print("devices: not started", self.name)
@@ -213,18 +214,16 @@ class Device:
             if self.preview:
                 self.preview_queue.put(None)
                 self.preview_thread.join()
-                #cv2.destroyWindow(self.name)
-                print("...(%s) closed preview" % self.name)
+                cv2.destroyWindow(self.name)
+                print("- (%s) devices - closed preview" % self.name)
             if hasattr(self, 'metadata_obj'):
                 #print('fileobj')
                 self.metadata_obj.close()
-                print('... (%s) [devices - filewriter stopped]' % self.name) 
-                del self.metadata_obj
-                print("...closed meta writer")
+                print('- (%s) devices - closed metadata' % self.name) 
             if hasattr(self, 'writer_obj'):
                 self.writer_obj.stop()
-                del self.writer_obj
-                print(" ...(%s) closed writer" % self.name)
+                #del self.writer_obj
+                print("- (%s) devices - closed writer" % self.name)
             self.started = False
             print('Devices stopped - %s' %self.name) 
         except Exception as e:
@@ -837,74 +836,79 @@ class Basler(Device):
         # them into this function
         bs.turn_strobe_on(self.nodemap, self.strobe['line']) #, strobe_duration=self.strobe['duration'])
 
-    def loop(self, timeout_time=5000):
+    def loop(self, timeout_time=5000, report_period=10):
         
         print("looping - %s" % self.name)
         if not self.started:
             raise ValueError('start must be called before loop!')
         
-        #try:
-        if self.cam.GetGrabResultWaitObject().Wait(0):
-            print("grab results waiting")
-        should_continue = self.cam.IsGrabbing() #True
-        timeout_time=5000
-        while self.cam.IsGrabbing(): #should_continue:
-            if self.nframes==0:
-                elapsed_time=0 
+        try:
+            if self.cam.GetGrabResultWaitObject().Wait(0):
+                print("grab results waiting")
+            should_continue = self.cam.IsGrabbing() #True
+            timeout_time=5000
+            while self.cam.IsGrabbing(): #should_continue:
+                if self.nframes==0:
+                    elapsed_time=0 
 
-            if self.nframes % self.acquisition_fps==0:
-                print("[fps %.1f] grabbing (%ith frame)" % (self.acquisition_fps, self.nframes))
+                if self.nframes % round(report_period*self.acquisition_fps) ==0:
+                    print("[fps %.1f] grabbing (%ith frame) | elapsed %.2f" % (self.acquisition_fps, self.nframes, elapsed_time))
 
-            image_result = self.cam.RetrieveResult(timeout_time, pylon.TimeoutHandling_Return) #, pylon.TimeoutHandling_ThrowException)
-            #if (image_result.GetNumberOfSkippedImages()):
-            #    print("Skipped ", image_result.GetNumberOfSkippedImages(), " image.")
-            if image_result is None and elapsed_time%5==0: #not image_result.GrabSucceeded():
-                print("... waiting")
-                continue
-                #pass
-            if image_result.GrabSucceeded():
-                self.nframes += 1
-                #print("got image %i" % self.nframes)
-                frame = bs.convert_image(image_result)
-                #frame = image_converted.GetNDArray()                
-                #frame = self.process(frame)
-                sestime = time.perf_counter() - self.start_t
-                cputime = time.time()
-                frameid =  image_result.ID #GetFrameID()
-                framecount = self.nframes
-                # timestamp is nanoseconds from last time camera was powered off
-                timestamp = image_result.GetTimeStamp()*1e-9 + self.timestamp_offset 
-                # print('standard process time: %.6f' %(time.perf_counter() - start_t))
-                # def write_metadata(self, framecount, timestamp, arrival_time, sestime, cputime):
-                # metadata = (framecount, timestamp, sestime, cputime)
-                if self.save:
-                    self.writer_obj.write(frame) # send frame to save_queue
-                    self.write_metadata(self.serial, framecount, frameid, timestamp, sestime, cputime)
-                    # self.save_queue.put_nowait((frame, metadata))
-                image_result.Release()
+                image_result = self.cam.RetrieveResult(timeout_time, pylon.TimeoutHandling_Return) #, pylon.TimeoutHandling_ThrowException)
+                #if (image_result.GetNumberOfSkippedImages()):
+                #    print("Skipped ", image_result.GetNumberOfSkippedImages(), " image.")
+                if image_result is None and elapsed_time%5==0: #not image_result.GrabSucceeded():
+                    print("... waiting")
+                    continue
+                    #pass
+                if image_result.GrabSucceeded():
+                    self.nframes += 1
+                    #print("got image %i" % self.nframes)
+                    frame = bs.convert_image(image_result)
+                    #frame = image_converted.GetNDArray()                
+                    #frame = self.process(frame)
+                    sestime = time.perf_counter() - self.start_t
+                    cputime = time.time()
+                    frameid =  image_result.ID #GetFrameID()
+                    framecount = self.nframes
+                    # timestamp is nanoseconds from last time camera was powered off
+                    timestamp = image_result.GetTimeStamp()*1e-9 + self.timestamp_offset 
+                    # print('standard process time: %.6f' %(time.perf_counter() - start_t))
+                    # def write_metadata(self, framecount, timestamp, arrival_time, sestime, cputime):
+                    # metadata = (framecount, timestamp, sestime, cputime)
+                    if self.save:
+                        self.writer_obj.write(frame) # send frame to save_queue
+                        self.write_metadata(self.serial, framecount, frameid, timestamp, sestime, cputime)
+                        # self.save_queue.put_nowait((frame, metadata))
+                    image_result.Release()
 
-                # only output every 10th frame for speed
-                # might be unnecessary
-                if self.preview:# and framecount % 5 ==0:
-                    self.preview_queue.put_nowait((frame,framecount))
-                    #self.preview_worker((frame, framecount))
-                    if self.latest_frame is not None:
-                        cv2.imshow(self.name, self.latest_frame)
-                frames = None
-                # Break out of the while loop if ESC registered
-                elapsed_time = time.perf_counter() - self.start_timer #exp_start_time
-                key = cv2.waitKey(1)
-                #sync_state = cameras[cameraContextValue].LineStatus.GetValue()
-                #if key == 27 or sync_state is False or (elapsed_time>duration_sec): # ESC
-                if key == 27 or (elapsed_time>self.duration_sec): # ESC
-                    #print("Sync:", sync_state)
-                    #writerA.close()
-                    #writerB.close()
-                    print("elapsed:", sestime)
-                    print("breaking")
-                    break
-                # time.sleep(1)
-        self.stop()
+                    # only output every 10th frame for speed
+                    # might be unnecessary
+                    if self.preview:# and framecount % 5 ==0:
+                        self.preview_queue.put_nowait((frame,framecount))
+                        #self.preview_worker((frame, framecount))
+                        if self.latest_frame is not None:
+                            cv2.imshow(self.name, self.latest_frame)
+                    frames = None
+                    # Break out of the while loop if ESC registered
+                    elapsed_time = time.perf_counter() - self.start_timer #exp_start_time
+                    key = cv2.waitKey(1)
+                    #sync_state = cameras[cameraContextValue].LineStatus.GetValue()
+                    #if key == 27 or sync_state is False or (elapsed_time>duration_sec): # ESC
+                    if key == 27 or (elapsed_time>self.duration_sec): # ESC
+                        #print("Sync:", sync_state)
+                        #writerA.close()
+                        #writerB.close()
+                        print("elapsed:", sestime)
+                        print("breaking")
+                        break 
+                    # time.sleep(1)
+        except KeyboardInterrupt:
+            print("ABORT loop")
+            should_continue=False
+            pass
+        finally:
+            self.stop()
 
     def initialize_metadata_saving_hdf5(self):
         if not os.path.exists(self.directory):
@@ -939,7 +943,6 @@ class Basler(Device):
         elif self.metadata_format=='csv':
             append_to_csv(self.metadata_obj, serial, framecount, frameid, timestamp, sestime, cputime)
 
-
     def stop_streaming(self):
         # print(dir(self.pipeline))
 #        hang_time = time.time()
@@ -964,7 +967,10 @@ class Basler(Device):
             #self.cam.DeInit()
             self.cam.Close()
             #del(self.cam)
-            self.system.ReleaseInstance()
+            #self.system.ReleaseInstance()
+            #self.metadata_obj.close()
+            
+            #tables.file._open_files.close_all()
         except BaseException as e:
             if self.verbose:
                 print('Probably tried to call stop before a start.')

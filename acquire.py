@@ -28,7 +28,7 @@ import yaml
 import warnings
 import sys
 import serial as pyserial
-
+import signal
 #from concurrent.futures import ProcessPoolExecutor as PoolExec
 
 
@@ -48,32 +48,8 @@ except ImportError as e:
     print('Basler not found, can''t acquire from Basler cameras')
     Basler = None
 
-#from functools import wraps
 
-
-#def waitpid(func):
-#    cache = {}
-#
-#    @wraps(func)
-#    def wrapper(pid, options):
-#        try:
-#            wpid, status = func(pid, options)
-#            if wpid > 0:
-#                cache[wpid] = status
-#        except OSError as e'csv', #:
-#            if pid in cache:
-#                return pid, cache[pid]
-#            else:
-#                raise e
-#        else:
-#            return wpid, status
-#
-#    return wrapper
-#
-#os.waitpid = waitpid(os.waitpid)
-#
-
-def initialize_and_loop(tuple_list_item): #config, camname, cam, args, experiment, start_t): #, arduino):
+def initialize_and_loop(tuple_list_item, report_period=5): #config, camname, cam, args, experiment, start_t): #, arduino):
     config, camname, cam, args, experiment, start_t = tuple_list_item
     if cam['type'] == 'Realsense':
         device = Realsense(serial=cam['serial'], 
@@ -116,7 +92,7 @@ def initialize_and_loop(tuple_list_item): #config, camname, cam, args, experimen
             experiment=experiment,
             name=camname,
             movie_format=args.movie_format, 
-            metadata_format='csv', #'hdf5', 
+            metadata_format='hdf5', #'hdf5', 
             uncompressed=False, # setting to False always because you don't need to calibrate it
             preview=args.preview,
             verbose=args.verbose,
@@ -135,13 +111,11 @@ def initialize_and_loop(tuple_list_item): #config, camname, cam, args, experimen
         time.sleep(sleep_time)
         device.start()
         time.sleep(2)
-
         # Set up arduino for trigger
         arduino = initialize_arduino(port=args.port, baudrate=115200)
-
         arduino.write(b'S%d\r' % args.acquisition_fps)   
         print("***Arduino started***")
-        device.arduino = arduino
+        #device.arduino = arduino
 
     else:
         sleep_time = 1 #np.random.randn()+3
@@ -149,16 +123,17 @@ def initialize_and_loop(tuple_list_item): #config, camname, cam, args, experimen
         device.start()
         time.sleep(2)
 
-    #time.sleep(5)
-    #arduino.write(b'S%d\r' % args.acquisition_fps)   
-    #print("***Arduino started***")
-
     #print("STARTED DEVICE")
     # runs until keyboard interrupt!
     try:
-        device.loop()
+        device.loop(report_period=report_period)
         #return camname, cam['serial']   
     except KeyboardInterrupt:
+        print("Aborted in main")
+        if cam['master'] in [True, 'True']:
+            arduino.write(b'Q\r')
+            print("Closed Arduino")
+    finally:
         if cam['master'] in [True, 'True']:
             arduino.write(b'Q\r')
             print("Closed Arduino")
@@ -183,21 +158,16 @@ def initialize_arduino(port='/dev/ttyACM0', baudrate=115200):
     #serial_queue = mp.Queue()
     return arduino #, serial_queue
 
-def send_to_arduino(arduino, serial_queue, acquisition_fps):
-    # send data to ardunio, maybe in a loop
-    # sleeping 30ms after each update
-    while True:
-        data = serial_queue.get()
-        print(data)
-        if data=='q':
-            arduino.write(b'Q\r')
-            print("***Arduino stopped***")
-            break
 
-        arduino.write(b'S%d\r' % acquisition_fps)   
-        print("***Arduino started***")
+def initializer():
+    """Ignore CTRL+C in the worker process."""
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
 
- 
+def worker_init():
+    # ignore the SIGINI in sub process, just print a log
+    def sig_int(signal_num, frame):
+        print('signal: %s' % signal_num)
+    signal.signal(signal.SIGINT, sig_int)
 
 def main():
     parser = argparse.ArgumentParser(description='Multi-camera acquisition in Python.')
@@ -265,6 +235,9 @@ def main():
     # make a name for this experiment
     experiment = '%s_%s' %(args.name, time.strftime('%y%m%d_%H%M%S', time.localtime()))
     if args.save:
+        # update config to reflect runtime params
+        args_dict = vars(args)
+        config.update({'args': args_dict})
         directory = os.path.join(config['savedir'], experiment)
         if not os.path.isdir(directory):
             os.makedirs(directory)
@@ -315,7 +288,7 @@ def main():
     if len(config['cams']) >1 :
         print("Multi-camera")
         #with mp.Pool(len(config['cams'])) as pool:
-        pool = mp.Pool(len(config['cams'])) 
+        pool = mp.Pool(len(config['cams']), initializer=worker_init()) #initializer) 
         try:
             #res = pool.starmap(initialize_and_loop, tuple_list)
             #res = pool.map(initialize_and_loop, *zip(*tuple_list))
@@ -323,35 +296,33 @@ def main():
             time.sleep(5)
             print('mapped')
             time.sleep(1)
-            print("STARTED")
+            print("Executed.")
 
             key = cv2.waitKey(1) & 0xFF
-            if key==27:
-                raise(KeyboardInterrupt)
-            #elif key==ord('s'):
-            #    arduino.write(b'S%d\r' % args.acquisition_fps)   
-            #    print("***Arduino started***")
+            #if key==27:
+            #    raise(KeyboardInterrupt)
 
+                #elif key==ord('s'):
+                #    arduino.write(b'S%d\r' % args.acquisition_fps)   
+                #    print("***Arduino started***")
         except KeyboardInterrupt:
             print('User interrupted acquisition')
             print("pool closed")
         finally:
-            #pool.shutdown()
+            #pool.shutdown() 
             pool.terminate()
             pool.join()
             pool.close()
-
+            #pool.join()
+            #pool.close()
+#
     else:
         tuple_list = [(config, camname, cam, args, experiment, start_t)]
         assert len(tuple_list) == 1
         initialize_and_loop(*tuple_list[0])
 
     #if args.preview:
-    cv2.destroyAllWindows()
-    for p in mp.active_children():
-        print(p)
-        p.terminate()
-
+    #cv2.destroyAllWindows()
     #arduino.write(b'Q\r')
     #print('Stopped arduino....')
 

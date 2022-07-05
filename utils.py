@@ -93,7 +93,8 @@ def append_to_csv(f, serial, framecount, frameid, timestamp, sestime, cputime):
 #    append_to_hdf5(self.metadata_obj,'arrival_time', arrival_time)
 #    append_to_hdf5(self.metadata_obj,'sestime', sestime)
 #    append_to_hdf5(self.metadata_obj, 'cputime', cputime)
-   f.write(','.join([str(s) for s in [serial, framecount, frameid, timestamp, sestime, cputime]]) + '\n')
+    f.write(','.join([str(s) for s in [serial, framecount, frameid, timestamp, sestime, cputime]]) + '\n')
+    print(serial, frameid)
 
 class DirectoryWriter:
     def __init__(self, directory, filetype, fnum:int=0):
@@ -313,7 +314,7 @@ class VideoWriter:
             #if not self.save_queue.empty(): # is not None:
             self.save_queue.put(None)
             if self.verbose:
-                print('None to save_queue...')
+                print('stopping video writer, sendingt None to save_queue...')
             #self.save_queue.join()
             #del (self.save_queue)
             if not self.save_queue.empty():
