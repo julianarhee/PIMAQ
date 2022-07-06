@@ -1,3 +1,4 @@
+from re import I
 import cv2
 import h5py
 import numpy as np
@@ -64,11 +65,13 @@ def initialize_ffmpeg(filename,framesize, codec=None, fps:float=30.0):
         #'-vcodec', 'h264_nvenc', #'libx264',
         '-c:v', 'h264_nvenc',
         #'-crf', '17', 
-        '-b:v', '5M',
+        '-b:v', '1M',
+        '-preset', 'fast',
         filename]
     # if you want to print to the command line, change stderr to sp.STDOUT
     pipe = sp.Popen( command, stdin=sp.PIPE, stderr=sp.DEVNULL)
     return(pipe)
+
 # from here 
 # https://zulko.github.io/blog/2013/09/27/read-and-write-video-frames-in-python-using-ffmpeg/
 def write_frame_ffmpeg(pipe, frame):
@@ -94,7 +97,7 @@ def append_to_csv(f, serial, framecount, frameid, timestamp, sestime, cputime):
 #    append_to_hdf5(self.metadata_obj,'sestime', sestime)
 #    append_to_hdf5(self.metadata_obj, 'cputime', cputime)
     f.write(','.join([str(s) for s in [serial, framecount, frameid, timestamp, sestime, cputime]]) + '\n')
-    print(serial, frameid)
+    #print(serial, frameid)
 
 class DirectoryWriter:
     def __init__(self, directory, filetype, fnum:int=0):
@@ -140,7 +143,8 @@ class VideoWriter:
     """
     def __init__(self, filename: Union[str, bytes, os.PathLike], height: int = None, width: int = None,
                  fps: int = 30, movie_format: str = 'opencv', codec: str = 'MJPG', filetype='.jpg',
-                 colorspace: str = 'RGB', asynchronous: bool = True, verbose: bool = False) -> None:
+        colorspace: str = 'RGB', asynchronous: bool = True, verbose: bool = False, 
+        metadata_format: str='hdf5', nframes_per_file: int=10) -> None:
         """Initializes a VideoWriter object.
 
         Args:
@@ -172,21 +176,33 @@ class VideoWriter:
             if movie_format == 'opencv' or movie_format == 'ffmpeg':
                 assert (ext in ['.avi', '.mp4'])
             self.codec = codec
+
+        pdir, fname = os.path.split(filename)
+        fbase, ext = os.path.splitext(fname)
+        self.directory = pdir
+        self.basename = fbase
+        self.nframes_per_file = nframes_per_file
+
         self.height = height
         self.width = width
-        
+        self.verbose = verbose 
         self.movie_format = movie_format
-        if self.movie_format == 'ffmpeg':
-            print('Using libx264 to encode video, ignoring codec argument...')
+        self.movie_ext = ext
+        self.metadata_format = metadata_format
+
+        #if self.movie_format == 'ffmpeg':
+        #    print('Using libx264 to encode video, ignoring codec argument...')
         self.fps = fps
         
         self.colorspace = colorspace
         assert (self.colorspace in ['BGR', 'RGB', 'GRAY'])
-        self.verbose = verbose
         self.asynchronous = asynchronous
 
         self.writer_obj = None
+        self.nframes = 0 #None
+        self.file_counter = 0
 
+        
         if movie_format == 'hdf5':
             self.initialization_func = initialize_hdf5
             self.write_function = write_frame_hdf5
@@ -211,6 +227,15 @@ class VideoWriter:
         
         self.has_stopped = False
 
+
+        pdir, fn = os.path.split(self.filename)
+        new_fn = '%s_%05d' % (self.basename, self.file_counter)
+        self.filename = os.path.join(pdir, '%s%s' % (new_fn, self.movie_ext))
+        print(self.filename)
+
+        self.initialize_metadata_saving_hdf5() #file_counter=self.file_counter)
+
+
     def save_worker(self, queue):
         """Worker for asychronously writing video to disk
         Get results from save_queue, then write it (give it to VideoWriter)"""
@@ -234,7 +259,6 @@ class VideoWriter:
         
         if self.verbose:
             print('out of save queue')
-
 
     def write(self, frame: np.ndarray):
         """Writes numpy array to disk. 
@@ -270,9 +294,19 @@ class VideoWriter:
             self.width = W
 
         # initialize the writer object. Could be OpenCV VideoWriter, subprocessing Pipe, or HDF5 File
+        
+        if self.nframes is None or self.nframes<=0:
+            self.nframes = 0 
+            self.file_counter = 0 
+
+        if self.verbose: 
+            print("---- ", self.nframes, self.file_counter)
+
         if self.writer_obj is None:
             self.writer_obj = self.initialization_func(self.filename,
                                                        (self.width, self.height), self.codec, self.fps)
+            self.initialize_metadata_saving_hdf5() #file_counter=self.file_counter)
+
 
         if frame.dtype == np.uint8:
             pass
@@ -295,6 +329,30 @@ class VideoWriter:
                 frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
         # actually write to disk
         self.write_function(self.writer_obj, frame)
+        self.nframes += 1
+
+        if (self.nframes>0) and (self.nframes % self.nframes_per_file)==0:
+            self.file_counter += 1
+
+            pdir, fn = os.path.split(self.filename)
+            new_fn = '%s_%05d' % (self.basename, self.file_counter)
+            self.filename = os.path.join(pdir, '%s%s' % (new_fn, self.movie_ext))
+            if self.verbose:
+                print(self.filename)
+
+            if self.movie_format == 'ffmpeg':
+                self.writer_obj.stdin.close()
+                if self.writer_obj.stderr is not None:
+                    self.writer_obj.stderr.close()
+
+            self.writer_obj = self.initialization_func(self.filename,
+                                                    (self.width, self.height), self.codec, self.fps)
+
+            if self.metadata_obj is not None:
+                self.metadata_obj.close()
+            self.initialize_metadata_saving_hdf5() #file_counter=self.file_counter)
+
+
 
     def __enter__(self):
         # allows use with decorator
@@ -314,7 +372,7 @@ class VideoWriter:
             #if not self.save_queue.empty(): # is not None:
             self.save_queue.put(None)
             if self.verbose:
-                print('stopping video writer, sendingt None to save_queue...')
+                print('stopping video writer, sending None to save_queue...')
             #self.save_queue.join()
             #del (self.save_queue)
             if not self.save_queue.empty():
@@ -351,6 +409,10 @@ class VideoWriter:
                     self.writer_obj.stderr.close()
                 self.writer_obj.wait()
                 del (self.writer_obj)
+
+        if hasattr(self, 'metadata_obj') and self.metadata_obj is not None:
+            self.metadata_obj.close()
+
         self.has_stopped = True
         print("[utils - videowriter stopped (%s)]" % self.filename)
 
@@ -364,3 +426,41 @@ class VideoWriter:
                 print(e)
             else:
                 pass
+
+
+    def initialize_metadata_saving_hdf5(self):
+        if not os.path.exists(self.directory):
+            os.makedirs(self.directory)
+
+        #basename = '%s_%05d' % (self.basename, self.file_counter)
+        basename, ext = os.path.splitext(self.filename)
+
+        if self.metadata_format=='hdf5': 
+            fname = os.path.join(basename + '_metadata.h5')
+            f = h5py.File(fname, 'w')
+
+            dset = f.create_dataset('serial',(0,),maxshape=(None,),dtype=np.int32)
+            dset = f.create_dataset('framecount',(0,),maxshape=(None,),dtype=np.int32)
+            dset = f.create_dataset('frameid',(0,),maxshape=(None,),dtype=np.int32)
+            dset = f.create_dataset('timestamp',(0,),maxshape=(None,),dtype=np.float64)
+            dset = f.create_dataset('sestime',(0,),maxshape=(None,),dtype=np.float64)
+            dset = f.create_dataset('cputime',(0,),maxshape=(None,),dtype=np.float64)
+        elif self.metadata_format == 'csv':
+            fname = os.path.join(basename + '_metadata.csv')
+            print("Saving meta: %s" % fname)
+            f = serial_file = open(fname, 'w+') #open(serial_outfile, 'w+')
+            f.write(','.join(['serial', 'framecount', 'frameid', 'timestamp', 'sestime', 'cputime']) + '\n')
+
+        self.metadata_obj = f
+
+    def write_metadata(self, serial, framecount, frameid, timestamp,  sestime, cputime):
+        # t0 = time.perf_counter()
+        if self.metadata_format=='hdf5':
+            append_to_hdf5(self.metadata_obj,'serial', serial)
+            append_to_hdf5(self.metadata_obj,'framecount', framecount)
+            append_to_hdf5(self.metadata_obj,'frameid', frameid)
+            append_to_hdf5(self.metadata_obj,'timestamp', timestamp)
+            append_to_hdf5(self.metadata_obj,'sestime', sestime)
+            append_to_hdf5(self.metadata_obj, 'cputime', cputime)
+        elif self.metadata_format=='csv':
+            append_to_csv(self.metadata_obj, serial, framecount, frameid, timestamp, sestime, cputime)

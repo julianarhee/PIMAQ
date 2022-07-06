@@ -15,7 +15,7 @@ basler_options:
 cams:
   left_top: 
     type: Basler
-    master: False
+    master: True
     serial: 22297042 
     # set options to none to use default
     options:

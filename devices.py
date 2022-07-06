@@ -8,8 +8,8 @@ import warnings
 import traceback
 import sys
 import multiprocessing as mp
+from datetime import datetime
 
-import tables
 try:
     import pyrealsense2 as rs
 except ImportError as e:
@@ -38,13 +38,15 @@ except ImportError as e:
 if pylon is not None:
     import basler_utils as bs
 
+import utils as utils
+
 
 class Device:
     def __init__(self, start_t=None,height=None,width=None,save=False,savedir=None,
                 experiment=None, name=None,
                 movie_format='hdf5',metadata_format='hdf5', uncompressed=False,
                 preview=False,verbose=False, codec='MJPG', asynchronous=True,
-                acquisition_fps=30., videowrite_fps=None, report_period=10):
+                acquisition_fps=30., videowrite_fps=None, report_period=10, nframes_per_file=10):
         # print('Initializing %s' %name)
         # self.config = config
         # self.serial = serial
@@ -69,6 +71,9 @@ class Device:
         self.writer_obj = None
         self.metadata_obj = None
 
+        self.movie_format = movie_format
+        self.metadata_format = metadata_format
+
         if movie_format == 'hdf5':
             ending = '.h5'
         elif movie_format == 'ffmpeg':
@@ -77,18 +82,59 @@ class Device:
             ending = '.avi'
         else:
             raise ValueError('unknown movie format: {}'.format(movie_format))
+
+        self.video_format = ending[1:]
+
+
+        tstamp_fmt = '%Y%m%d%H%M%S'
+        datestr = datetime.now().strftime(tstamp_fmt) 
+
+        self.basename = '%s_%s' % (self.name, datestr) #, file_counter)
+        self.filename = os.path.join(self.directory, '%s.%s' % (self.basename, self.video_format))
+        self.nframes_per_file = nframes_per_file
+        print("VIDEO-W: ", self.nframes_per_file)
+        self.filetype=None
         if self.save:
             if uncompressed:
                 filetype = '.png'
                 movie_format = 'directory'
             else:
                 filetype = '.png'
+            self.filetype = filetype
 
-            self.writer_obj = VideoWriter(filename=os.path.join(self.directory, name + ending), 
-                height=self.height, width=self.width, fps=20, verbose=self.verbose, 
-                movie_format=movie_format, filetype=filetype, asynchronous=self.asynchronous
+            self.writer_obj = VideoWriter(filename=self.filename, #os.path.join(self.directory, name + ending), 
+                height=self.height, width=self.width, fps=self.videowrite_fps, verbose=self.verbose, 
+                movie_format=movie_format, filetype=filetype, asynchronous=self.asynchronous,
+                nframes_per_file=nframes_per_file, metadata_format=self.metadata_format
                 )    
 
+
+#    def initialize_videowriter(self, file_counter):
+#        tstamp_fmt = '%Y%m%d%H%M%S'
+#        datestr = datetime.now().strftime(tstamp_fmt) 
+#
+#        basename = '%s_%s_%s' % (self.name, file_counter, datestr)
+#        filename = os.path.join(self.directory, '%s.%s' % (basename, self.video_format))
+#        print("Creating video writer: %s" % filename)
+#        self.writer_obj = VideoWriter(filename=filename, 
+#                height=self.height, width=self.width, fps=self.videowrite_fps, verbose=self.verbose, 
+#                movie_format=self.movie_format, filetype=self.filetype, asynchronous=self.asynchronous
+#                )    
+#
+#        print("Vid Writer initialized: %s" % basename)
+#
+#    def start_new_file(self, file_counter):
+#        old_writer = self.writer_obj
+#        self.writer_obj = self.initialize_videowriter(file_counter)
+#        old_writer.stop()
+#
+#        old_meta = self.metadata_obj
+#        self.initialize_metadata_saving_hdf5(file_counter=file_counter)
+#        old_meta.close()
+#
+#        print("started new file: FILE %i" % file_counter)
+#
+#
     def process(self):
         # should be overridden by all subclasses
         raise NotImplementedError    
@@ -108,13 +154,6 @@ class Device:
         self.preview_thread = Thread(target=self.preview_worker, args=(self.preview_queue,))
         self.preview_thread.daemon = True
         self.preview_thread.start()
-
-    def initialize_previewX(self):
-        # cv2.namedWindow(self.name, cv2.WINDOW_NORMAL)
-        print("New window: %s" % self.name)
-        cv2.namedWindow(self.name, cv2.WINDOW_NORMAL) #AUTOSIZE)
-        self.font = cv2.FONT_HERSHEY_SIMPLEX
-        self.latest_frame = None
 
     def preview_worker(self, queue):
         should_continue = True
@@ -145,37 +184,6 @@ class Device:
             cv2.putText(frame,string,(10,out_height-20), self.font, 0.5,(0,0,255),2,cv2.LINE_AA)
             self.latest_frame = frame
             queue.task_done()
-
-    def preview_workerX(self, item):
-        should_continue = True
-        while should_continue:
-            #item = queue.get()
-            # print(item)
-            if item is None:
-                if self.verbose:
-                    print('Preview stop signal received')
-                should_continue=False
-                break
-                # break
-            # left, right, count = item
-            frame, count = item
-            # frame should be processed, so a single RGB image
-            # out = np.vstack((left,right))
-            h, w, c = frame.shape
-#            if self.save:
-#                frame = cv2.resize(frame, (w//2,h//2),cv2.INTER_NEAREST)
-#                out_height = h//2
-#            else:
-#                frame = cv2.resize(frame, (w,h),cv2.INTER_NEAREST)
-#                out_height = h//3*2
-#            # frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
-            out_height=h                    
-            # string = '%.4f' %(time_acq*1000)
-            string = '%s:%07d' %(self.name, count)
-            cv2.putText(frame,string,(10,out_height-20), self.font, 0.5,(0,0,255),2,cv2.LINE_AA)
-            self.latest_frame = frame
-            #queue.task_done()
-
 
     def initialize_metadata_saving_hdf5(self):
         # should be overridden by all subclasses
@@ -216,18 +224,18 @@ class Device:
                 self.preview_thread.join()
                 cv2.destroyWindow(self.name)
                 print("- (%s) devices - closed preview" % self.name)
-            if hasattr(self, 'metadata_obj'):
+            if hasattr(self, 'metadata_obj') and self.metadata_obj is not None: # moved this to utils.py
                 #print('fileobj')
                 self.metadata_obj.close()
                 print('- (%s) devices - closed metadata' % self.name) 
-            if hasattr(self, 'writer_obj'):
+            if self.writer_obj is not None and hasattr(self, 'writer_obj'):
                 self.writer_obj.stop()
                 #del self.writer_obj
                 print("- (%s) devices - closed writer" % self.name)
             self.started = False
             print('Devices stopped - %s' %self.name) 
         except Exception as e:
-            print(e)
+            traceback.print_exc()
 
     def __del__(self):
         try:
@@ -430,7 +438,7 @@ class Realsense(Device):
         # f['extrinsics'] = extrinsics
 
         self.metadata_obj = f
-        
+
     def write_metadata(self, framecount, timestamp, arrival_time, sestime, cputime):
         # t0 = time.perf_counter()
         append_to_hdf5(self.metadata_obj,'framecount', framecount)
@@ -680,17 +688,27 @@ class PointGrey(Device):
 
 #%%
 
+#    def __init__(self, start_t=None,height=None,width=None,save=False,savedir=None,
+#                experiment=None, name=None,
+#                movie_format='hdf5',metadata_format='hdf5', uncompressed=False,
+#                preview=False,verbose=False, codec='MJPG', asynchronous=True,
+#                acquisition_fps=30., videowrite_fps=None, report_period=10, nframes_per_file=10):
+#
+
+#
 class Basler(Device):
     def __init__(self,serial,
                  start_t=None,options=None,save=False,savedir=None,experiment=None, name=None,
         movie_format='opencv', metadata_format='hdf5', uncompressed=False,preview=False,verbose=False,
-        strobe=None,codec='libx264', max_cams=2, experiment_duration=np.inf, 
-        asynchronous=True, acquisition_fps=10, videowrite_fps=None):
+        strobe=None, codec='libx264', experiment_duration=np.inf, 
+        asynchronous=True, acquisition_fps=10, videowrite_fps=None, report_period=10, nframes_per_file=100):
 
+        max_cams=2
         self.duration_sec = experiment_duration*60.0
         self.acquisition_fps = acquisition_fps
         self.videowrite_fps = acquisition_fps*2 if videowrite_fps is None else videowrite_fps
         self.nframes = 0
+
 
         self.verbose=verbose
         # use these options to override input width and height
@@ -710,9 +728,9 @@ class Basler(Device):
 #                preview=False,verbose=False, codec='MJPG', asynchronous=True,
 #                acquisition_fps=30., videowrite_fps=None):
 #
-        super().__init__(start_t,options['Height'], options['Width'], save, savedir, experiment, name, 
-                        movie_format, metadata_format, uncompressed,preview, verbose, codec, asynchronous,
-                        acquisition_fps, videowrite_fps)
+        super().__init__(start_t, options['Height'], options['Width'], save, savedir, experiment, name, 
+                        movie_format, metadata_format, uncompressed, preview, verbose, codec, 
+                        asynchronous, acquisition_fps, videowrite_fps, report_period, nframes_per_file)
 
         version = pylon.__version__ #system.GetLibraryVersion()
         
@@ -749,8 +767,8 @@ class Basler(Device):
 
         # self.cam = cam
         self.system = tlFactory
-        if self.save:
-            self.initialize_metadata_saving_hdf5()
+#        if self.save:
+#            self.initialize_metadata_saving_hdf5(file_counter=0)
 
         if options is None:
             # Note: modify these at your own risk! Don't change the order!
@@ -847,12 +865,23 @@ class Basler(Device):
                 print("grab results waiting")
             should_continue = self.cam.IsGrabbing() #True
             timeout_time=5000
+            file_counter=0
             while self.cam.IsGrabbing(): #should_continue:
                 if self.nframes==0:
                     elapsed_time=0 
 
                 if self.nframes % round(report_period*self.acquisition_fps) ==0:
-                    print("[fps %.1f] grabbing (%ith frame) | elapsed %.2f" % (self.acquisition_fps, self.nframes, elapsed_time))
+                    print("[fps %.2f] grabbing (%ith frame) | elapsed %.2f" % (self.acquisition_fps, self.nframes, elapsed_time))
+
+                #if (self.writer_obj.nframes>0) and (self.writer_obj.nframes % self.writer_obj.nframes_per_file) == 0:
+                    #print("STARTING NEW", self.writer_obj.file_counter)
+                    #file_counter += 1
+                    #self.writer_obj.stop()
+                    #self.writer_obj = self.initialize_videowriter(file_counter)
+                    #self.metadata_obj.close()
+                    #self.initialize_metadata_saving_hdf5(file_counter=self.writer_obj.file_counter)
+                    #self.start_new_file(file_counter)
+
 
                 image_result = self.cam.RetrieveResult(timeout_time, pylon.TimeoutHandling_Return) #, pylon.TimeoutHandling_ThrowException)
                 #if (image_result.GetNumberOfSkippedImages()):
@@ -877,9 +906,13 @@ class Basler(Device):
                     # def write_metadata(self, framecount, timestamp, arrival_time, sestime, cputime):
                     # metadata = (framecount, timestamp, sestime, cputime)
                     if self.save:
+                        if self.writer_obj is None:
+                            #self.start_new_file(file_counter)
+                            print("V:", self.writer_obj)
                         self.writer_obj.write(frame) # send frame to save_queue
-                        self.write_metadata(self.serial, framecount, frameid, timestamp, sestime, cputime)
+                        self.writer_obj.write_metadata(self.serial, framecount, frameid, timestamp, sestime, cputime)
                         # self.save_queue.put_nowait((frame, metadata))
+
                     image_result.Release()
 
                     # only output every 10th frame for speed
@@ -910,38 +943,42 @@ class Basler(Device):
         finally:
             self.stop()
 
-    def initialize_metadata_saving_hdf5(self):
-        if not os.path.exists(self.directory):
-            os.makedirs(self.directory)
-        if self.metadata_format=='hdf5': 
-            fname = os.path.join(self.directory, self.name + '_metadata.h5')
-            f = h5py.File(fname, 'w')
+#    def initialize_metadata_saving_hdf5(self, file_counter):
+#        if not os.path.exists(self.directory):
+#            os.makedirs(self.directory)
+#
+#        basename = '%s_%05d' % (self.basename, self.writer_obj.file_counter)
+#
+#        if self.metadata_format=='hdf5': 
+#            fname = os.path.join(self.directory, basename + '_metadata.h5')
+#            f = h5py.File(fname, 'w')
+#
+#            dset = f.create_dataset('serial',(0,),maxshape=(None,),dtype=np.int32)
+#            dset = f.create_dataset('framecount',(0,),maxshape=(None,),dtype=np.int32)
+#            dset = f.create_dataset('frameid',(0,),maxshape=(None,),dtype=np.int32)
+#            dset = f.create_dataset('timestamp',(0,),maxshape=(None,),dtype=np.float64)
+#            dset = f.create_dataset('sestime',(0,),maxshape=(None,),dtype=np.float64)
+#            dset = f.create_dataset('cputime',(0,),maxshape=(None,),dtype=np.float64)
+#        elif self.metadata_format == 'csv':
+#            fname = os.path.join(self.directory, basename + '_metadata.csv')
+#            print("Saving meta: %s" % fname)
+#            f = serial_file = open(fname, 'w+') #open(serial_outfile, 'w+')
+#            f.write(','.join(['serial', 'framecount', 'frameid', 'timestamp', 'sestime', 'cputime']) + '\n')
+#
+#        self.metadata_obj = f
+#        
+#    def write_metadata(self, serial, framecount, frameid, timestamp,  sestime, cputime):
+#        # t0 = time.perf_counter()
+#        if self.metadata_format=='hdf5':
+#            append_to_hdf5(self.metadata_obj,'serial', serial)
+#            append_to_hdf5(self.metadata_obj,'framecount', framecount)
+#            append_to_hdf5(self.metadata_obj,'frameid', frameid)
+#            append_to_hdf5(self.metadata_obj,'timestamp', timestamp)
+#            append_to_hdf5(self.metadata_obj,'sestime', sestime)
+#            append_to_hdf5(self.metadata_obj, 'cputime', cputime)
+#        elif self.metadata_format=='csv':
+#            append_to_csv(self.metadata_obj, serial, framecount, frameid, timestamp, sestime, cputime)
 
-            dset = f.create_dataset('serial',(0,),maxshape=(None,),dtype=np.int32)
-            dset = f.create_dataset('framecount',(0,),maxshape=(None,),dtype=np.int32)
-            dset = f.create_dataset('frameid',(0,),maxshape=(None,),dtype=np.int32)
-            dset = f.create_dataset('timestamp',(0,),maxshape=(None,),dtype=np.float64)
-            dset = f.create_dataset('sestime',(0,),maxshape=(None,),dtype=np.float64)
-            dset = f.create_dataset('cputime',(0,),maxshape=(None,),dtype=np.float64)
-        elif self.metadata_format == 'csv':
-            fname = os.path.join(self.directory, self.name + '_metadata.csv')
-            print("Saving meta: %s" % fname)
-            f = serial_file = open(fname, 'w+') #open(serial_outfile, 'w+')
-            f.write(','.join(['serial', 'framecount', 'frameid', 'timestamp', 'sestime', 'cputime']) + '\n')
-
-        self.metadata_obj = f
-        
-    def write_metadata(self, serial, framecount, frameid, timestamp,  sestime, cputime):
-        # t0 = time.perf_counter()
-        if self.metadata_format=='hdf5':
-            append_to_hdf5(self.metadata_obj,'serial', serial)
-            append_to_hdf5(self.metadata_obj,'framecount', framecount)
-            append_to_hdf5(self.metadata_obj,'frameid', frameid)
-            append_to_hdf5(self.metadata_obj,'timestamp', timestamp)
-            append_to_hdf5(self.metadata_obj,'sestime', sestime)
-            append_to_hdf5(self.metadata_obj, 'cputime', cputime)
-        elif self.metadata_format=='csv':
-            append_to_csv(self.metadata_obj, serial, framecount, frameid, timestamp, sestime, cputime)
 
     def stop_streaming(self):
         # print(dir(self.pipeline))

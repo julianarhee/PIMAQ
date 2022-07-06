@@ -92,7 +92,7 @@ def initialize_and_loop(tuple_list_item, report_period=5): #config, camname, cam
             experiment=experiment,
             name=camname,
             movie_format=args.movie_format, 
-            metadata_format='hdf5', #'hdf5', 
+            metadata_format=args.metadata_format, #'hdf5', 
             uncompressed=False, # setting to False always because you don't need to calibrate it
             preview=args.preview,
             verbose=args.verbose,
@@ -100,7 +100,8 @@ def initialize_and_loop(tuple_list_item, report_period=5): #config, camname, cam
             codec=config['codec'],
             acquisition_fps=args.acquisition_fps,
             videowrite_fps = args.videowrite_fps,
-            experiment_duration = args.experiment_duration
+            experiment_duration = args.experiment_duration,
+            nframes_per_file=args.nframes_per_file
             )
 
     else:
@@ -122,6 +123,9 @@ def initialize_and_loop(tuple_list_item, report_period=5): #config, camname, cam
         time.sleep(sleep_time)
         device.start()
         time.sleep(2)
+
+
+    print("ACQ: %.2f" % device.acquisition_fps, device.writer_obj.nframes_per_file)
 
     #print("STARTED DEVICE")
     # runs until keyboard interrupt!
@@ -184,6 +188,9 @@ def main():
     parser.add_argument('--movie_format', default='opencv',
         choices=['hdf5','opencv', 'ffmpeg', 'directory'], type=str,
         help='Method to save files to movies. Dramatically affects performance and filesize')
+    parser.add_argument('--metadata_format', default='hdf5',
+        choices=['hdf5', 'txt', 'csv'], type=str,
+        help='Metadata format for timestamps (default: hdf5)')
 
     parser.add_argument('--port', default='/dev/ttyACM0', type=str,
          help='port for arduino (default: /dev/ttyACM0)')
@@ -194,6 +201,8 @@ def main():
          help='Video save frame rate (default: 10 Hz)')
     parser.add_argument('-d', '--experiment_duration', default=np.inf, type=float,
          help='Experiment dur in minutes (default: inf.)')
+    parser.add_argument('-f', '--nframes_per_file', default=100, type=int,
+         help='N frames per file (default: 100)')
 
     args = parser.parse_args()
 
@@ -319,7 +328,7 @@ def main():
     else:
         tuple_list = [(config, camname, cam, args, experiment, start_t)]
         assert len(tuple_list) == 1
-        initialize_and_loop(*tuple_list[0])
+        initialize_and_loop(tuple_list[0])
 
     #if args.preview:
     #cv2.destroyAllWindows()
