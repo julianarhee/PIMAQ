@@ -202,7 +202,8 @@ def set_value(nodemap, nodename, value):
                 print('Valid entries: ')
                 entrylist = nodeval.GetEntries()
                 for entry in entrylist:
-                    print(entry.GetName())
+                    print(entry)
+                    #print(entry.GetName())
                 raise ValueError('Invalid entry!: %s' %value)
                 #else:
                 #entry = PySpin.CEnumEntryPtr(entry)
