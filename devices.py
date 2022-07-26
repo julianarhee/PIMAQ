@@ -909,7 +909,7 @@ class Basler(Device):
                         if self.writer_obj is None:
                             #self.start_new_file(file_counter)
                             print("V:", self.writer_obj)
-                        self.writer_obj.write(frame) # send frame to save_queue
+                        self.writer_obj.write(image_result.Array) #frame) # send frame to save_queue
                         self.writer_obj.write_metadata(self.serial, framecount, frameid, timestamp, sestime, cputime)
                         # self.save_queue.put_nowait((frame, metadata))
 
