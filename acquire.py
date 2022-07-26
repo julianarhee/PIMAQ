@@ -124,8 +124,8 @@ def initialize_and_loop(tuple_list_item, report_period=5): #config, camname, cam
         device.start()
         time.sleep(2)
 
-
-    print("ACQ: %.2f" % device.acquisition_fps, device.writer_obj.nframes_per_file)
+    if args.verbose and device.writer_obj is not None:
+        print("ACQ: %.2f" % device.acquisition_fps, device.writer_obj.nframes_per_file)
 
     #print("STARTED DEVICE")
     # runs until keyboard interrupt!
