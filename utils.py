@@ -308,6 +308,7 @@ class VideoWriter:
             self.initialize_metadata_saving_hdf5() #file_counter=self.file_counter)
 
 
+        #print(frame.dtype, frame.shape, self.colorspace)
         if frame.dtype == np.uint8:
             pass
         elif frame.dtype == np.float:
