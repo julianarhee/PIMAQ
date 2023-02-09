@@ -1,3 +1,39 @@
+# Multicamera acquisition
+Build off of PIMAQ to include support for Basler USB3 cameras. Use hardware trigger with Arduino generating a square-wave pulse at desired frame rate. Simultaneously display acquisition stream. 
+
+## Setup
+1. Create env
+```
+$ conda env create -f environment.yaml
+```
+- Install `PIMAQ` (see below)
+
+2. Basler SDK
+Download Basler SDK and install pypylon (python wrapper for Basler camera suite).
+
+3. Install Arduino
+
+## Run
+1. Upload Arduino acquisition-trigger.
+When running acquire.py, the desired acquisition frame rate will be sent to the Arduino for the pulse.
+
+2. Specify configs.
+Create config.yaml in working directory.
+
+3. Start acquisition.
+```
+$ python acquire.py --config /path/to/config.yaml 
+```
+Parms:
+- `duration`: duration of experiment (in minutes)
+- `nframes_per_file`: specify this, especially for long recordings, in case anything crashes
+- `acquisition_fps': frame rate for acquisition
+- 'videowrite_fps': frame rate to write video
+
+Notes:
+- If processes hang, can try running `python clear_python.py`.
+
+
 # PIMAQ
 ## Python Image Acquisition 
 ### A software package for simultaneous video acquisition from multiple cameras. 
