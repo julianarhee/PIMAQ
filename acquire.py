@@ -50,7 +50,7 @@ except ImportError as e:
 
 
 def initialize_and_loop(tuple_list_item, report_period=5): #config, camname, cam, args, experiment, start_t): #, arduino):
-    config, camname, cam, args, experiment, start_t = tuple_list_item
+    config, camname, cam, args, experiment, start_t, trigger_with_arduino = tuple_list_item
     if cam['type'] == 'Realsense':
         device = Realsense(serial=cam['serial'], 
             start_t=start_t,
@@ -107,7 +107,7 @@ def initialize_and_loop(tuple_list_item, report_period=5): #config, camname, cam
     else:
         raise ValueError('Invalid camera type: %s' %cam['type'])
     # sync_mode = 'master' if serial == args.master else 'slave'
-    if cam['master'] in [True, 'True']:
+    if cam['master'] in [True, 'True'] and trigger_with_arduino:
         sleep_time = 1 #np.random.randn()+3
         time.sleep(sleep_time)
         device.start()
@@ -201,8 +201,12 @@ def main():
          help='Video save frame rate (default: 10 Hz)')
     parser.add_argument('-d', '--experiment_duration', default=np.inf, type=float,
          help='Experiment dur in minutes (default: inf.)')
-    parser.add_argument('-f', '--nframes_per_file', default=100, type=int,
-         help='N frames per file (default: 100)')
+    parser.add_argument('-f', '--nframes_per_file', default=72000, type=int,
+         help='N frames per file (default: 72000, or 10min at 120Hz)')
+
+    parser.add_argument('-A', '--trigger_with_arduino', default=True,
+         action='store_false',
+         help='Flag to use python software trigger (instead of arduino)')
 
     args = parser.parse_args()
 
@@ -225,10 +229,12 @@ def main():
     # Set up arduino for trigger
     # port = "/dev/cu.usbmodem145201"
     #arduino=None
-    arduino = initialize_arduino(port=args.port, baudrate=115200)
-    arduino.write(b'Q\r') # % args.acquisition_fps)   
-    print("***Arduino cleared***")
-    arduino.close()
+    trigger_with_arduino = args.trigger_with_arduino
+    if trigger_with_arduino or len(config['cams'])>1:
+        arduino = initialize_arduino(port=args.port, baudrate=115200)
+        arduino.write(b'Q\r') # % args.acquisition_fps)   
+        print("***Arduino cleared***")
+        arduino.close()
 
     acquisition_fps = args.acquisition_fps
     videowrite_fps = args.videowrite_fps
@@ -256,7 +262,7 @@ def main():
     tuple_list=[]
     for camname, cam in config['cams'].items():
         print(camname)
-        tup = (config, camname, cam, args, experiment, start_t) #, serial_queue) #, arduino)
+        tup = (config, camname, cam, args, experiment, start_t, trigger_with_arduino) #, serial_queue) #, arduino)
         #p = mp.Process(target=initialize_and_loop, args=(tup,))
         #p.start()
         tuple_list.append(tup)
@@ -326,7 +332,7 @@ def main():
             #pool.close()
 #
     else:
-        tuple_list = [(config, camname, cam, args, experiment, start_t)]
+        tuple_list = [(config, camname, cam, args, experiment, start_t, trigger_with_arduino)]
         assert len(tuple_list) == 1
         initialize_and_loop(tuple_list[0])
 
