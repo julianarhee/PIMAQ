@@ -273,7 +273,7 @@ def set_value(nodemap, nodename, value):
 #        raise ValueError('Error: %s' %e)
 #
 
-def turn_strobe_on(nodemap, line): # strobe_duration=0.0):
+def turn_strobe_on(nodemap, line, trigger_selector='FrameStart'): # strobe_duration=0.0):
     '''
     # Set  trigger
     # get clean powerup state -- now in self.cleanup_powerup_state()
@@ -296,7 +296,7 @@ def turn_strobe_on(nodemap, line): # strobe_duration=0.0):
     
     linestr = 'Line%d'%line
 
-    set_value(nodemap, 'TriggerSelector', 'FrameStart')
+    set_value(nodemap, 'TriggerSelector', trigger_selector)
     set_value(nodemap, 'TriggerMode', 'On')
     set_value(nodemap, 'TriggerDelay', 0)
     set_value(nodemap, 'TriggerActivation', 'RisingEdge')
