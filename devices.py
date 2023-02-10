@@ -797,7 +797,8 @@ class Basler(Device):
         if strobe is None:
             strobe = {
             'line': 2,
-            'duration': 0.0
+            'duration': 0.0,
+            'trigger_selector': 'FrameStart'
             }
         self.options = options
         self.strobe = strobe
@@ -852,7 +853,7 @@ class Basler(Device):
             bs.set_value(self.nodemap, key, value)
         # changing strobe involves multiple variables in the correct order, so I've bundled
         # them into this function
-        bs.turn_strobe_on(self.nodemap, self.strobe['line']) #, strobe_duration=self.strobe['duration'])
+        bs.turn_strobe_on(self.nodemap, self.strobe['line'], trigger_selector=self.strobe['trigger_selector']) #, strobe_duration=self.strobe['duration'])
 
     def loop(self, timeout_time=5000, report_period=10):
         
@@ -866,22 +867,22 @@ class Basler(Device):
             should_continue = self.cam.IsGrabbing() #True
             timeout_time=5000
             file_counter=0
+
+            print('waiting')
+            last_report = 0
+            while not self.cam.GetGrabResultWaitObject().Wait(0):
+                elapsed_pre = time.perf_counter() - self.start_timer #exp_start_tim     
+                if round(elapsed_pre) % 5 == 0 and round(elapsed_pre)!=last_report:
+                    print("...waiting", round(elapsed_pre))
+                last_report = round(elapsed_pre)
+
             while self.cam.IsGrabbing(): #should_continue:
+
                 if self.nframes==0:
-                    elapsed_time=0 
+                    elapsed_time=0
 
                 if self.nframes % round(report_period*self.acquisition_fps) ==0:
                     print("[fps %.2f] grabbing (%ith frame) | elapsed %.2f" % (self.acquisition_fps, self.nframes, elapsed_time))
-
-                #if (self.writer_obj.nframes>0) and (self.writer_obj.nframes % self.writer_obj.nframes_per_file) == 0:
-                    #print("STARTING NEW", self.writer_obj.file_counter)
-                    #file_counter += 1
-                    #self.writer_obj.stop()
-                    #self.writer_obj = self.initialize_videowriter(file_counter)
-                    #self.metadata_obj.close()
-                    #self.initialize_metadata_saving_hdf5(file_counter=self.writer_obj.file_counter)
-                    #self.start_new_file(file_counter)
-
 
                 image_result = self.cam.RetrieveResult(timeout_time, pylon.TimeoutHandling_Return) #, pylon.TimeoutHandling_ThrowException)
                 #if (image_result.GetNumberOfSkippedImages()):
@@ -926,7 +927,8 @@ class Basler(Device):
                     # Break out of the while loop if ESC registered
                     elapsed_time = time.perf_counter() - self.start_timer #exp_start_time
                     key = cv2.waitKey(1)
-                    #sync_state = cameras[cameraContextValue].LineStatus.GetValue()
+                    sync_state = self.cam.LineStatus.GetValue() #cameras[cameraContextValue].LineStatus.GetValue()
+                    #print(sync_state)
                     #if key == 27 or sync_state is False or (elapsed_time>duration_sec): # ESC
                     if key == 27 or (elapsed_time>self.duration_sec): # ESC
                         #print("Sync:", sync_state)
