@@ -305,7 +305,7 @@ class VideoWriter:
         if self.writer_obj is None:
             self.writer_obj = self.initialization_func(self.filename,
                                                        (self.width, self.height), self.codec, self.fps)
-            self.initialize_metadata_saving_hdf5() #file_counter=self.file_counter)
+            #self.initialize_metadata_saving_hdf5() #file_counter=self.file_counter)
 
 
         #print(frame.dtype, frame.shape, self.colorspace)
