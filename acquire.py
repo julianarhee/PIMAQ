@@ -103,7 +103,6 @@ def initialize_and_loop(tuple_list_item, report_period=5): #config, camname, cam
             experiment_duration = args.experiment_duration,
             nframes_per_file=args.nframes_per_file
             )
-
     else:
         raise ValueError('Invalid camera type: %s' %cam['type'])
     # sync_mode = 'master' if serial == args.master else 'slave'
@@ -111,7 +110,7 @@ def initialize_and_loop(tuple_list_item, report_period=5): #config, camname, cam
         sleep_time = 1 #np.random.randn()+3
         time.sleep(sleep_time)
         device.start()
-        time.sleep(2)
+        time.sleep(0.5)
         # Set up arduino for trigger
         arduino = initialize_arduino(port=args.port, baudrate=115200)
         arduino.write(b'S%d\r' % args.acquisition_fps)   
@@ -122,7 +121,7 @@ def initialize_and_loop(tuple_list_item, report_period=5): #config, camname, cam
         sleep_time = 1 #np.random.randn()+3
         time.sleep(sleep_time)
         device.start()
-        time.sleep(2)
+        time.sleep(0.5)
 
     if args.verbose and device.writer_obj is not None:
         print("ACQ: %.2f" % device.acquisition_fps, device.writer_obj.nframes_per_file)
