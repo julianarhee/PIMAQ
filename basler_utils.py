@@ -89,8 +89,8 @@ def connect_to_devices(max_cams=2, connect_retries=50):
     return cameras
 
 
-def set_camera_properties(cameras, frame_rate=20., acquisition_line='Line4', enable_framerate=True,
-                     send_trigger=False,  width=1200, height=1200, exposure=16670):
+def set_camera_properties(cameras, frame_rate=20., acquisition_line='Line4', enable_framerate=False,
+                     send_trigger=True,  width=1200, height=1200, exposure=16670):
 
     # acquisition settings
     for i, cam in enumerate(cameras):
@@ -116,8 +116,8 @@ def set_camera_properties(cameras, frame_rate=20., acquisition_line='Line4', ena
             cam.TriggerDelay.SetValue(0)
             cam.TriggerActivation = 'RisingEdge' 
             #cam.AcquisitionMode.SetValue('SingleFrame')
-            cam.AcquisitionMode.SetValue('Continuous')
-            #cam.AcquisitionStatusSelector="FrameTriggerWait"
+            #cam.AcquisitionMode.SetValue('Continuous')
+            cam.AcquisitionStatusSelector="FrameTriggerWait"
 
             # Set IO lines:
             cam.TriggerSource.SetValue("Line4")
@@ -273,8 +273,11 @@ def set_value(nodemap, nodename, value):
 #        raise ValueError('Error: %s' %e)
 #
 
-def turn_strobe_on(nodemap, line, trigger_selector='FrameStart'): # strobe_duration=0.0):
+def turn_strobe_on(nodemap, line, trigger_selector='FrameStart', line_output=None, line_source='ExposureActive'): # strobe_duration=0.0):
     '''
+    # is using external hardware trigger, select line_output to record actual on times (LineSource = 'ExposureActive')
+    # check camera model for which lines can be out/in
+
     # Set  trigger
     # get clean powerup state -- now in self.cleanup_powerup_state()
     cam.TriggerSelector = "FrameStart"
@@ -294,29 +297,32 @@ def turn_strobe_on(nodemap, line, trigger_selector='FrameStart'): # strobe_durat
     assert(type(line)==int)
     #assert(type(strobe_duration)==float)
     
-    linestr = 'Line%d'%line
-
     set_value(nodemap, 'TriggerSelector', trigger_selector)
     set_value(nodemap, 'TriggerMode', 'On')
+    set_value(nodemap, 'TriggerSource', 'Line3')
+
     set_value(nodemap, 'TriggerDelay', 0)
     set_value(nodemap, 'TriggerActivation', 'RisingEdge')
-    set_value(nodemap, 'AcquisitionMode', 'Continuous') # must be continuous for external frame trigger
+    #set_value(nodemap, 'AcquisitionMode', 'Continuous') # must be continuous for external frame trigger
+    set_value(nodemap, 'AcquisitionStatusSelector', 'FrameTriggerWait')
+    set_value(nodemap, 'AcquisitionBurstFrameCount', 1)
 
     # Set trigger source 
-    set_value(nodemap, 'TriggerSource', linestr)
+    linestr = 'Line%d'%line
     # set the line selector to this line so that we change the following
     # values for Line2, for example, not Line0
     set_value(nodemap, 'LineSelector', linestr)
     # one of input, trigger, strobe, output
     set_value(nodemap, 'LineMode', 'Input') #'strobe')
-    # enable strobe
-    #set_value(nodemap, 'StrobeEnabled', True)
-    # set duration, in us I think?
-    #set_value(nodemap, 'StrobeDuration', strobe_duration)
-    # inverted means low by default, high when strobe is on
-    #set_value(nodemap, 'LineInverter', True)
 
+    # set output
+    if line_output is not None:
+        linestr_out = 'Line%d' % line_output
+        set_value(nodemap, 'LineSelector', linestr_out)
+        set_value(nodemap, 'LineMode', 'Output')
+        set_value(nodemap, 'LineSource', line_source)
 
+    
 def print_value(nodemap, nodename):
     assert(type(nodename)==str)
     node = nodemap.GetNode(nodename)
