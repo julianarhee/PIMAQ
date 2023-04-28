@@ -211,7 +211,7 @@ class Device:
         print("----------stopping-------------------")
         print('- name: %s' % self.name)
         if hasattr(self, 'arduino'):
-            self.arduino.write(b'Q\r')
+            self.arduino.write(b'Q\r\n')
             self.arduino.close()        
             print('- closed arduino')
         try:
@@ -697,19 +697,21 @@ class PointGrey(Device):
 
 #
 class Basler(Device):
-    def __init__(self,serial,
-                 start_t=None,options=None,save=False,savedir=None,experiment=None, name=None,
-        movie_format='opencv', metadata_format='hdf5', uncompressed=False,preview=False,verbose=False,
-        strobe=None, codec='libx264', experiment_duration=np.inf, 
-        asynchronous=True, acquisition_fps=10, videowrite_fps=None, report_period=10, nframes_per_file=100):
+    def __init__(self,serial, nodemap_path=None,
+                 start_t=None,options=None,save=False,
+                 savedir=None,experiment=None, name=None,
+                movie_format='opencv', metadata_format='hdf5', 
+                uncompressed=False,preview=False,verbose=False,
+                strobe=None, codec='libx264', experiment_duration=np.inf, 
+                asynchronous=True, acquisition_fps=10, 
+                videowrite_fps=None, report_period=10, nframes_per_file=100):
 
         max_cams=2
         self.duration_sec = experiment_duration*60.0
         self.acquisition_fps = acquisition_fps
         self.videowrite_fps = acquisition_fps*2 if videowrite_fps is None else videowrite_fps
         self.nframes = 0
-
-
+        self.nodemap_path = nodemap_path
         self.verbose=verbose
         # use these options to override input width and height
         # Retrieve singleton reference to system object
@@ -760,6 +762,10 @@ class Basler(Device):
         self.cam.Open() #self.cam.Init()
         self.compute_timestamp_offset()
 
+        # try loading configs
+        if nodemap_path is not None:
+            self.update_settings()
+
         self.nodemap = self.cam.GetNodeMap()
         self.serial = serial
         print("Serial: ", serial)
@@ -771,6 +777,7 @@ class Basler(Device):
 #            self.initialize_metadata_saving_hdf5(file_counter=0)
 
         if options is None:
+            print("Using default camera settings")
             # Note: modify these at your own risk! Don't change the order!
             # many have dependencies that are hard to figure out, so the order matters.
             # For example, ExposureAuto must be set to Off before ExposureTime can be changed. 
@@ -796,9 +803,10 @@ class Basler(Device):
             } #set_camera_properties(options)
         if strobe is None:
             strobe = {
-            'line': 2,
+            'line': 3,
             'duration': 0.0,
-            'trigger_selector': 'FrameStart'
+            'trigger_selector': 'FrameStart',
+            'line_output': 4 #None
             }
         self.options = options
         self.strobe = strobe
@@ -829,7 +837,7 @@ class Basler(Device):
         print("here")
         self.update_settings()
         #self.cam.Open()
-        self.cam.AcquisitionStart.Execute() #BeginAcquisition()
+        #self.cam.AcquisitionStart.Execute() #BeginAcquisition()
         self.cam.StartGrabbing(pylon.GrabStrategy_OneByOne)
         print("Started cam acquisition")
         if self.save:
@@ -841,21 +849,29 @@ class Basler(Device):
         self.start_timer = time.perf_counter()
 
     def update_settings(self):
-        """ Updates PointGrey camera settings.
+        """ Updates Basler camera settings.
         Attributes, types, and range of possible values for each attribute are available
         in the camera documentation. 
         These are extraordinarily tricky! Order matters! For exampple, ExposureAuto must be set
         to Off before ExposureTime can be set. 
         """
         print("-updating settings-")
-        for key, value in self.options.items():
-            #print(key, value)
-            bs.set_value(self.nodemap, key, value)
-        # changing strobe involves multiple variables in the correct order, so I've bundled
-        # them into this function
-        bs.turn_strobe_on(self.nodemap, self.strobe['line'], trigger_selector=self.strobe['trigger_selector']) #, strobe_duration=self.strobe['duration'])
 
-    def loop(self, timeout_time=5000, report_period=10):
+        if self.nodemap_path is not None:
+            print("Loading saved configs to camera")
+            pylon.FeaturePersistence.Load(nodemap_path, self.cam.GetNodeMap(), True)
+        else:
+            for key, value in self.options.items():
+                #print(key, value)
+                bs.set_value(self.nodemap, key, value)
+            # changing strobe involves multiple variables in the correct order, so I've bundled
+            # them into this function
+            bs.turn_strobe_on(self.nodemap, self.strobe['line'], 
+                            trigger_selector=self.strobe['trigger_selector'], 
+                            line_output=self.strobe['line_output'], 
+                            line_source=self.strobe['line_source']) 
+
+    def loop(self, arduino=None, timeout_time=5000, report_period=10):
         
         print("looping - %s" % self.name)
         if not self.started:
@@ -864,22 +880,27 @@ class Basler(Device):
         try:
             if self.cam.GetGrabResultWaitObject().Wait(0):
                 print("grab results waiting")
-            should_continue = self.cam.IsGrabbing() #True
-            timeout_time=5000
+            #should_continue = self.cam.IsGrabbing() #True
+            timeout_time=60000
             file_counter=0
 
-            print('waiting')
+            print('Checking for results')
             last_report = 0
+
             while not self.cam.GetGrabResultWaitObject().Wait(0):
+                #print(arduino.readline())
+
                 elapsed_pre = time.perf_counter() - self.start_timer #exp_start_tim     
                 if round(elapsed_pre) % 5 == 0 and round(elapsed_pre)!=last_report:
                     print("...waiting", round(elapsed_pre))
+                    
                 last_report = round(elapsed_pre)
 
             while self.cam.IsGrabbing(): #should_continue:
 
                 if self.nframes==0:
                     elapsed_time=0
+                    self.frame_timer = time.perf_counter()
 
                 if self.nframes % round(report_period*self.acquisition_fps) ==0:
                     print("[fps %.2f] grabbing (%ith frame) | elapsed %.2f" % (self.acquisition_fps, self.nframes, elapsed_time))
@@ -925,19 +946,31 @@ class Basler(Device):
                             cv2.imshow(self.name, self.latest_frame)
                     frames = None
                     # Break out of the while loop if ESC registered
-                    elapsed_time = time.perf_counter() - self.start_timer #exp_start_time
+                    elapsed_time = time.perf_counter() - self.frame_timer #exp_start_time
                     key = cv2.waitKey(1)
                     sync_state = self.cam.LineStatus.GetValue() #cameras[cameraContextValue].LineStatus.GetValue()
                     #print(sync_state)
                     #if key == 27 or sync_state is False or (elapsed_time>duration_sec): # ESC
+
+                    movtime = time.perf_counter() - self.frame_timer
+
                     if key == 27 or (elapsed_time>self.duration_sec): # ESC
                         #print("Sync:", sync_state)
                         #writerA.close()
                         #writerB.close()
                         print("elapsed:", sestime)
+                        print("movie dur:", movtime)
                         print("breaking")
                         break 
                     # time.sleep(1)
+
+                    if arduino.in_waiting > 0:
+                        data = arduino.readline()
+                        if data.strip().decode('utf-8')=='Q':
+                            print("elapsed:", sestime)
+                            print("movie dur:", movtime)
+                            print("breaking")
+                            break
         except KeyboardInterrupt:
             print("ABORT loop")
             should_continue=False

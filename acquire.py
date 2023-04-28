@@ -50,7 +50,12 @@ except ImportError as e:
 
 
 def initialize_and_loop(tuple_list_item, report_period=5): #config, camname, cam, args, experiment, start_t): #, arduino):
+    
     config, camname, cam, args, experiment, start_t, trigger_with_arduino = tuple_list_item
+
+    acquisition_fps=cam['options']['AcquisitionFrameRate']
+
+    # start camera
     if cam['type'] == 'Realsense':
         device = Realsense(serial=cam['serial'], 
             start_t=start_t,
@@ -85,6 +90,7 @@ def initialize_and_loop(tuple_list_item, report_period=5): #config, camname, cam
             )
     elif cam['type'] == 'Basler':
         device = Basler(serial=cam['serial'], 
+            nodemap_path=args.nodemap_path,
             start_t=start_t, 
             options=cam['options'],
             save=args.save, 
@@ -98,55 +104,54 @@ def initialize_and_loop(tuple_list_item, report_period=5): #config, camname, cam
             verbose=args.verbose,
             strobe=cam['strobe'],
             codec=config['codec'],
-            acquisition_fps=args.acquisition_fps,
+            acquisition_fps=acquisition_fps, 
             videowrite_fps = args.videowrite_fps,
             experiment_duration = args.experiment_duration,
             nframes_per_file=args.nframes_per_file
             )
     else:
         raise ValueError('Invalid camera type: %s' %cam['type'])
-    # sync_mode = 'master' if serial == args.master else 'slave'
-    if cam['master'] in [True, 'True'] and trigger_with_arduino:
-        sleep_time = 1 #np.random.randn()+3
-        time.sleep(sleep_time)
-        device.start()
-        time.sleep(0.5)
-        # Set up arduino for trigger
-        arduino = initialize_arduino(port=args.port, baudrate=115200)
-        arduino.write(b'S%d\r' % args.acquisition_fps)   
-        print("***Arduino started***")
-        #device.arduino = arduino
-
-    else:
-        sleep_time = 1 #np.random.randn()+3
-        time.sleep(sleep_time)
-        device.start()
-        time.sleep(0.5)
 
     if args.verbose and device.writer_obj is not None:
         print("ACQ: %.2f" % device.acquisition_fps, device.writer_obj.nframes_per_file)
 
     #print("STARTED DEVICE")
     # runs until keyboard interrupt!
+
+    if trigger_with_arduino is True: #cam['master'] in [True, 'True'] and 
+         # Set up arduino for trigger
+        arduino = initialize_arduino(port=args.port, baudrate=115200)
+        arduino.write(b'S%d\r\n' % int(device.acquisition_fps))
+        #arduino.write(str.encode('S{}'.format(device.acquisition_fps)))
+        print("***Arduino initiated ({} Hz)***".format(int(device.acquisition_fps)))
+        time.sleep(0.5)
+        #device.arduino = arduino
+        device.start()
+        time.sleep(0.5)
+    else:
+        time.sleep(1)
+        device.start()
+        time.sleep(0.5)
+
     try:
-        device.loop(report_period=report_period)
+        device.loop(arduino=arduino, report_period=report_period)
         #return camname, cam['serial']   
     except KeyboardInterrupt:
         print("Aborted in main")
         if cam['master'] in [True, 'True']:
-            arduino.write(b'Q\r')
+            arduino.write(b'Q\r\n')
             print("Closed Arduino")
     finally:
-        if cam['master'] in [True, 'True']:
-            arduino.write(b'Q\r')
-            print("Closed Arduino")
+        #if cam['master'] in [True, 'True']:
+        arduino.write(b'Q\r\n')
+        print("Closed Arduino")
 
     return ("done")
 
 
 def initialize_arduino(port='/dev/ttyACM0', baudrate=115200):
     # Set up arduino for trigger
-    # port = "/dev/cu.usbmodem145201"
+    # p#ort = "/dev/cu.usbmodem145201"
     #port = args.port
     #baudrate = 115200
     #print("# Please specify a port and a baudrate")
@@ -200,12 +205,16 @@ def main():
          help='Video save frame rate (default: 10 Hz)')
     parser.add_argument('-d', '--experiment_duration', default=np.inf, type=float,
          help='Experiment dur in minutes (default: inf.)')
-    parser.add_argument('-f', '--nframes_per_file', default=72000, type=int,
-         help='N frames per file (default: 72000, or 10min at 120Hz)')
+    parser.add_argument('-f', '--nframes_per_file', default=108000, type=int,
+         help='N frames per file (default: 108000, or 15min at 120Hz)')
 
-    parser.add_argument('-A', '--trigger_with_arduino', default=True,
+    parser.add_argument('-t', '--trigger_with_arduino', default=True,
          action='store_false',
          help='Flag to use python software trigger (instead of arduino)')
+
+    parser.add_argument('-N', '--nodemap_path', default=None,
+         action='store',
+         help='Path to nodemap (.txt)')
 
     args = parser.parse_args()
 
@@ -229,13 +238,14 @@ def main():
     # port = "/dev/cu.usbmodem145201"
     #arduino=None
     trigger_with_arduino = args.trigger_with_arduino
+    print("ARDUINO: ", trigger_with_arduino)
     if trigger_with_arduino or len(config['cams'])>1:
         arduino = initialize_arduino(port=args.port, baudrate=115200)
-        arduino.write(b'Q\r') # % args.acquisition_fps)   
+        arduino.write(b'Q\r\n') # % args.acquisition_fps)   
         print("***Arduino cleared***")
         arduino.close()
 
-    acquisition_fps = args.acquisition_fps
+    #acquisition_fps = args.acquisition_fps
     videowrite_fps = args.videowrite_fps
 
     """
@@ -247,7 +257,7 @@ def main():
     start_t = time.perf_counter()
     #tuples = []
     # make a name for this experiment
-    experiment = '%s_%s' %(args.name, time.strftime('%y%m%d_%H%M%S', time.localtime()))
+    experiment = '%s_%s' % (time.strftime('%Y%m%d-%H%M%S', time.localtime()), args.name)
     if args.save:
         # update config to reflect runtime params
         args_dict = vars(args)
