@@ -11,7 +11,7 @@ const byte txPin = 3;
 SoftwareSerial mySerial(rxPin, txPin, 1);
 const int LedPin = 9;
 bool pinStatus = 0;
-long fps = 10;
+long fps = 120;
 float duration = 5000.0;
 int input;
 float dutyCycle = 30.0;
