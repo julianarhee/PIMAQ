@@ -53,7 +53,8 @@ class Device:
         self.start_t = start_t
         self.save= save
         # self.savedir = savedir
-        self.directory = os.path.join(savedir, experiment)
+        #if savedir is not None:
+        self.directory = os.path.join(savedir, experiment) if savedir is not None else None
         # self.experiment = experiment
         self.name = name
         self.uncompressed = uncompressed
@@ -90,7 +91,8 @@ class Device:
         datestr = datetime.now().strftime(tstamp_fmt) 
 
         self.basename = '%s_%s' % (self.name, datestr) #, file_counter)
-        self.filename = os.path.join(self.directory, '%s.%s' % (self.basename, self.video_format))
+        if self.directory is not None:
+            self.filename = os.path.join(self.directory, '%s.%s' % (self.basename, self.video_format))
         self.nframes_per_file = nframes_per_file
         print("VIDEO-W: ", self.nframes_per_file)
         self.filetype=None
@@ -103,6 +105,7 @@ class Device:
             self.filetype = filetype
 
             self.writer_obj = VideoWriter(filename=self.filename, #os.path.join(self.directory, name + ending), 
+                #codec= self.codec,
                 height=self.height, width=self.width, fps=self.videowrite_fps, verbose=self.verbose, 
                 movie_format=movie_format, filetype=filetype, asynchronous=self.asynchronous,
                 nframes_per_file=nframes_per_file, metadata_format=self.metadata_format
@@ -709,7 +712,7 @@ class Basler(Device):
         max_cams=2
         self.duration_sec = experiment_duration*60.0
         self.acquisition_fps = acquisition_fps
-        self.videowrite_fps = acquisition_fps*2 if videowrite_fps is None else videowrite_fps
+        self.videowrite_fps = acquisition_fps if videowrite_fps is None else videowrite_fps
         self.nframes = 0
         self.nodemap_path = nodemap_path
         self.verbose=verbose
@@ -881,7 +884,7 @@ class Basler(Device):
             if self.cam.GetGrabResultWaitObject().Wait(0):
                 print("grab results waiting")
             #should_continue = self.cam.IsGrabbing() #True
-            timeout_time=60000
+            timeout_time=2000 #60000
             file_counter=0
 
             print('Checking for results')
@@ -966,7 +969,7 @@ class Basler(Device):
 
                     if arduino.in_waiting > 0:
                         data = arduino.readline()
-                        if data.strip().decode('utf-8')=='Q':
+                        if data.rstrip().decode('utf-8')=='Q':
                             print("elapsed:", sestime)
                             print("movie dur:", movtime)
                             print("breaking")

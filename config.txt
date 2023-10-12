@@ -1,0 +1,258 @@
+Favorites                               	
+  Center Y                              	0
+Basler acA2040-120um (24516213)         	
+  Sequencer Control                     	
+    Sequencer Mode                      	Off
+    Sequencer Set Active                	<not available>
+    Sequencer Configuration Mode        	Off
+    Sequencer Set Start                 	0
+    Sequencer Set Selector              	0
+    Sequencer Set Load                  	<not available>
+    Sequencer Set Save                  	<not available>
+    Sequencer Path Selector             	1
+    Sequencer Set Next                  	1
+    Sequencer Trigger Source            	FrameStart
+    Sequencer Trigger Activation        	LevelHigh
+  Image Format Control                  	
+    Sensor Width                        	2064
+    Sensor Height                       	1544
+    Max Width                           	688
+    Max Height                          	514
+    Width                               	680
+    Height                              	512
+    Offset X                            	0
+    Offset Y                            	0
+    Center X                            	0
+    Center Y                            	0
+    Binning Horizontal Mode             	Sum
+    Binning Horizontal                  	3
+    Binning Vertical Mode               	Sum
+    Binning Vertical                    	3
+    Reverse X                           	0
+    Reverse Y                           	0
+    Pixel Format                        	Mono8
+    Pixel Size                          	Bpp8
+    Pixel Color Filter                  	None
+    Dynamic Range Min                   	0
+    Dynamic Range Max                   	255
+    Test Image Selector                 	Off
+    Test Image Reset And Hold           	0
+    ROI Zone Selector                   	Zone0
+    ROI Zone Mode                       	Off
+    ROI Zone Size                       	4
+    ROI Zone Offset                     	0
+  Analog Control                        	
+    Gain Auto                           	Off
+    Gain Selector                       	All
+    Gain [dB]                           	0.00000
+    Black Level Selector                	All
+    Black Level [DN]                    	0.00000
+    Gamma                               	1.00000
+    Digital Shift                       	0
+  Image Quality Control                 	
+    PGI Control (non-Bayer only)        	
+      PGI Mode                          	Off
+      Noise Reduction                   	<not available>
+      Sharpness Enhancement             	<not available>
+  Acquisition Control                   	
+    Shutter Mode                        	Global
+    Exposure Auto                       	Off
+    Exposure Time Mode                  	Standard
+    Exposure Mode                       	Timed
+    Exposure Time [us]                  	10000.0
+    Exposure Overlap Time Mode          	<not available>
+    Exposure Overlap Time Max [us]      	<not available>
+    Acquisition Burst Frame Count       	1
+    Trigger Selector                    	FrameStart
+    Trigger Mode                        	On
+    Generate Software Trigger           	<not readable>
+    Trigger Source                      	Line3
+    Trigger Activation                  	RisingEdge
+    Trigger Delay [us]                  	0
+    Enable Acquisition Frame Rate       	0
+    Acquisition Frame Rate [Hz]         	100.00000
+    Resulting Frame Rate [Hz]           	99.37394
+    Sensor Readout Time [us]            	8066.0
+    Acquisition Status Selector         	FrameTriggerWait
+    Acquisition Status                  	1
+  Auto Function Control                 	
+    Auto Target Brightness              	0.50196
+    Auto Function Profile               	MinimizeGain
+    Gain Lower Limit [dB]               	0.00000
+    Gain Upper Limit [dB]               	23.90000
+    Exposure Time Lower Limit [us]      	50.0
+    Exposure Time Upper Limit [us]      	500000.0
+    Auto Function ROI Control           	
+      ROI Selector                      	ROI1
+      Width                             	682
+      Height                            	512
+      Offset X                          	2
+      Offset Y                          	2
+      Brightness                        	1
+      White Balance                     	0
+  LUT Control                           	
+    LUT Selector                        	Luminance
+    LUT Enable                          	0
+    LUT Index                           	0
+    LUT Value                           	0
+  Digital I/O Control                   	
+    Line Selector                       	Line4
+    Line Mode                           	Output
+    Line Format                         	TTL
+    Line Logic                          	Negative
+    Line Source                         	ExposureActive
+    Line Inverter                       	0
+    Line Debouncer Time [us]            	<not available>
+    Line Minimum Output Pulse Width [us]	0.000
+    Line Overload Status                	0
+    Line Status                         	1
+    Line Status All                     	0xa
+    User Output Selector                	UserOutput1
+    User Output Value                   	0
+    User Output Value All               	0
+  Software Signal Control               	
+    Software Signal Selector            	SoftwareSignal1
+    Software Signal Pulse               	0
+  Counter and Timer Control             	
+    Timer Selector                      	Timer1
+    Timer Duration [us]                 	10.0
+    Timer Delay [us]                    	0.0
+    Timer Trigger Source                	ExposureStart
+    Counter Selector                    	Counter1
+    Counter Event Source                	FrameStart
+    Counter Reset Source                	Off
+    Counter Reset Activation            	RisingEdge
+    Counter Reset                       	<not readable>
+    Counter Duration                    	<not available>
+  Basler Light Control                  	
+    Light Control Mode                  	Off
+    Light Control Source                	Off
+    Light Control Enumerate Devices     	<not available>
+    Light Control Status                	Off
+    Light Control Error Status          	NoError
+    Light Control Trigger Mode          	ExposureActive
+    Light Device Selector               	<not available>
+    Light Device Control Mode           	<not available>
+    Light Device Max Current [mA]       	<not available>
+    Light Device Brightness [%]         	<not available>
+    Light Device Operation Mode         	<not available>
+    Light Device Strobe Mode            	<not available>
+    Light Device Strobe Duration [us]   	<not available>
+    Light Device Overdrive Limit [%]    	<not available>
+    Light Device Last Error             	<not available>
+    Light Device Clear Last Error       	<not available>
+    Light Device Change ID              	<not available>
+    Light Device Model Name             	<not available>
+    Light Device Firmware Version       	<not available>
+  Chunk Data Control                    	
+    Chunk Mode Active                   	0
+    Chunk Selector                      	Timestamp
+    Chunk Enable                        	0
+    Chunk Gain Selector                 	<not available>
+    Chunk Gain [dB]                     	<not available>
+    Chunk Exposure Time [us]            	<not available>
+    Chunk Timestamp                     	<not available>
+    Chunk Line Status All               	<not available>
+    Chunk Counter Selector              	<not available>
+    Chunk Counter Value                 	<not available>
+    Chunk Sequencer Set Active          	<not available>
+    Chunk CRC Checksum                  	<not available>
+    Chunk Data                          	
+      Chunk Gain Selector               	<not available>
+      Chunk Gain [dB]                   	<not available>
+      Chunk Exposure Time [us]          	<not available>
+      Chunk Timestamp                   	<not available>
+      Chunk Line Status All             	<not available>
+      Chunk Counter Selector            	<not available>
+      Chunk Counter Value               	<not available>
+      Chunk Sequencer Set Active        	<not available>
+      Chunk CRC Checksum                	<not available>
+  Event Control                         	
+    Event Selector                      	ExposureEnd
+    Event Notification                  	Off
+  User Set Control                      	
+    User Set Selector                   	Default
+    User Set Load                       	<not available>
+    User Set Save                       	<not available>
+    User Set Default                    	Default
+  Transport Layer Control               	
+    Payload Size                        	348160
+    USB Speed Mode                      	SuperSpeed
+    Payload Transfer Size               	65536
+    Payload Transfer Count              	5
+    Payload Final Transfer1 Size        	20480
+    Payload Final Transfer2 Size        	0
+  Device Control                        	
+    Device Vendor Name                  	Basler
+    Device Model Name                   	acA2040-120um
+    Device Manufacturer Info            	none
+    Device Version                      	107206-26
+    Device Firmware Version             	107206-26;U;acA2040_120um;V1.5-2;0
+    Device Serial Number                	24516213
+    Device User ID                      	
+    Device Scan Type                    	Areascan
+    Timestamp Latch                     	<not readable>
+    Timestamp Latch Value [ns]          	0
+    Device Link Selector                	0
+    Device Link Speed [Bps]             	500000000
+    Device Link Throughput Limit Mode   	On
+    Device Link Throughput Limit [Bps]  	360000000
+    Device Link Current Throughput [Bps]	34606380
+    Device Temperature Selector         	Coreboard
+    Device Temperature [C]              	55.0
+    Temperature State                   	Ok
+    Device Reset                        	<not readable>
+    Device SFNC Version Major           	2
+    Device SFNC Version Minor           	1
+    Device SFNC Version SubMinor        	0
+  User Defined Values                   	
+    User Defined Value Selector         	Value1
+    User Defined Value                  	0
+  Remove Parameter Limit Control        	
+    Remove Parameter Limit Selector     	Gain
+    Remove Parameter Limit              	0
+  Expert Feature Access                 	
+    Expert Feature Access Selector      	ExpertFeature1
+    Expert Feature Access Key           	0
+    Expert Feature Enable               	<not available>
+  File Access Control                   	
+    File Selector                       	UserSet1
+    File Operation Selector             	Open
+    File Open Mode                      	Read
+    File Access Buffer                  	0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+    File Access Offset                  	0
+    File Access Length                  	0
+    File Operation Status               	Success
+    File Operation Result               	0
+    File Size                           	16
+    File Operation Execute              	<not readable>
+Host Transport Layer                    	
+  Statistic                             	
+    Read Pipe Reset Count               	0
+    Write Pipe Reset Count              	0
+    Read Operations Failed Count        	0
+    Write Operations Failed Count       	0
+    Last Error Status                   	0
+    Last Error Status Text              	
+Stream Parameters                       	
+  Maximum Number of Buffers             	24
+  Maximum Buffer Size                   	348160
+  Maximum Transfer Size                 	65536
+  Num Max Queued Urbs                   	64
+  Transfer Loop Thread Priority         	0
+  Statistic                             	
+    Total Buffer Count                  	1385
+    Failed Buffer Count                 	0
+    Last Failed Buffer Status           	0
+    Last Failed Buffer Status Text      	
+    Missed Frame Count                  	0
+    Resynchronization Count             	0
+    Last Block Id                       	1384
+Image Format Conversion                 	
+  Output Bit Alignment                  	MsbAligned
+  Output Orientation                    	Unchanged
+  Mono Conversion                       	
+    Mono Conversion Method              	Truncate
+    Gamma                               	<not available>
+    Additional Left Shift               	0
+

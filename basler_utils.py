@@ -2,6 +2,11 @@ from pypylon import pylon
 import time
 import pypylon
 import traceback
+import argparse
+import os
+import yaml
+import devices as dev
+
 
 #def enumerate_connected_devices():
 #    """
@@ -321,6 +326,7 @@ def turn_strobe_on(nodemap, line, trigger_selector='FrameStart', line_output=Non
         set_value(nodemap, 'LineSelector', linestr_out)
         set_value(nodemap, 'LineMode', 'Output')
         set_value(nodemap, 'LineSource', line_source)
+        set_value(nodemap, 'LineInverter', True)
 
     
 def print_value(nodemap, nodename):
@@ -361,3 +367,65 @@ def get_nodeval_and_type(node):
 #
     return(node, type(node))
 
+
+def set_config(config, camname, cam, args, start_t):
+    device = dev.Basler(serial=cam['serial'],
+        start_t=start_t,
+        options=cam['options'],
+        name=camname,
+        metadata_format='hdf5',
+        uncompressed=False, # setting to False always because you don't need to calibrate it
+        strobe=cam['strobe'],
+        codec=config['codec'],
+        acquisition_fps=args.acquisition_fps,
+        #binning_horizontal = config['binning_horizontal'],
+        #binning_vertical = config['binning_vertical'],
+        preview = args.preview
+        )
+
+    return device
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Multi-camera acquisition in Python.')
+    parser.add_argument('-c', '--config', type=str, default='config.yaml',
+        help='Configuration for acquisition. Defines number of cameras, serial numbers, etc.')
+    parser.add_argument('-p', '--preview', default=False, action='store_true',
+        help='Show preview in opencv window')
+    parser.add_argument('-v', '--verbose', default=False,action='store_true',
+        help='Use this flag to print debugging commands.')
+    parser.add_argument('--metadata_format', default='hdf5',
+        choices=['hdf5', 'txt', 'csv'], type=str,
+        help='Metadata format for timestamps (default: hdf5)')
+    parser.add_argument('-r', '--acquisition_fps', default=60, type=float,
+         help='Acquisition frame rate (default: 60 Hz)')
+    parser.add_argument('-V', '--binning_vertical', default=1, type=int,
+         help='Vertical bin size (default: 1)')
+    parser.add_argument('-H', '--binning_horizontal', default=1, type=int,
+         help='Horizontal bin size (default: 1)')
+
+    args = parser.parse_args()
+
+    if os.path.isfile(args.config):
+        with open(args.config) as f:
+            config = yaml.load(f, Loader=yaml.SafeLoader)
+    else:
+        raise ValueError('Invalid config file: %s' %args.config)
+
+    start_t = time.perf_counter()
+
+    for camname, cam in config['cams'].items():
+        device = set_config(config, camname, cam, args, start_t)
+        #time.sleep(2)
+        device.start()
+
+        if args.preview:
+            time.sleep(2)
+            # runs until keyboard interrupt!
+            device.loop(report_period=5) #report_period)
+
+    return ("done")
+
+if __name__=='__main__':
+    main()
+                

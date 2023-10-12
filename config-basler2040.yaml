@@ -13,37 +13,37 @@ basler_options:
   Gain: 1
   Uncompressed: False
 cams:
-  sideview: 
+  flyleft: 
     type: Basler
     master: False
     serial: 24516213
     # set options to none to use default
     options:
       # note: modify these at your own risk! don't change the order!
-      # many have dependencies that are hard to figure out, so the order matters.
-      # for example, exposureauto must be set to off before exposuretime can be changed. 
+      # many have dependencies that are hard to figure out, so order matters.
+      # for ex., exposureauto must be off before exposuretime can be changed. 
       #AcquisitionMode: 'Continuous' # can capture one frame or multiple frames as well
       ExposureAuto: 'Off' # manually set exposure
       ExposureMode: 'Timed'
-      ExposureTime: 10000.0 #68290.0 #1000.0 # in microseconds, so 1000 = 1ms
+      ExposureTime: 4000.0 #68290.0 #1000.0 # in microseconds, so 1000 = 1ms
       # if can't change binninghorizontal, change binvertical 
       # binningvertical
-      BinningVerticalMode: 'Sum'
-      BinningHorizontalMode: 'Sum'
-      BinningVertical: 3
-      BinningHorizontal: 3
-      Width: 680 #1024 # max 1280 if binning=1, else 640
-      Height: 512 #768 # max 1024 if binning=1, else 512
+      BinningVerticalMode: 'Average'
+      BinningHorizontalMode: 'Average'
+      BinningVertical: 4
+      BinningHorizontal: 4
+      Width: 504 #680 #1024 # max 1280 if binning=1, else 640
+      Height: 384 #512 #768 # max 1024 if binning=1, else 512
       OffsetX: 0 # left value of roi
       OffsetY: 0 # top value of roi
       CenterX: True
       CenterY: True
       PixelFormat: Mono8
       AcquisitionFrameRateEnable: False # False if external HW trigger per frame
-      AcquisitionFrameRate: 60.0
+      AcquisitionFrameRate: 120.0
       GainAuto: 'Off'
       Gain: 0.0
-      Gamma: 0.65 #1.0
+      Gamma: 0.5
       #SharpnessAuto: 'Off'
     strobe:
       line: 3 #3

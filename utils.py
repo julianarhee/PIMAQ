@@ -49,7 +49,7 @@ def write_frame_opencv(writer_obj, frame):
     
 def initialize_ffmpeg(filename,framesize, codec=None, fps:float=30.0):
     # filename = filename + '.avi'
-    size_string = '%dx%d' %framesize
+    size_string = '{}x{}'.format(framesize[0], framesize[1]) #'%dx%d' %framesize
     # outname = os.path.join(outdir, fname)
     fps = str(fps)
     command = [ 'ffmpeg',
@@ -63,13 +63,14 @@ def initialize_ffmpeg(filename,framesize, codec=None, fps:float=30.0):
         '-i', '-', # The imput comes from a pipe
         '-an', # Tells FFMPEG not to expect any audio
         #'-vcodec', 'h264_nvenc', #'libx264',
-        '-c:v', 'h264_nvenc',
+        '-c:v', 'libx264', #'h264_nvenc',
         #'-crf', '17', 
         '-b:v', '1M',
         '-preset', 'fast',
+        '-pix_fmt', 'yuv420p',
         filename]
     # if you want to print to the command line, change stderr to sp.STDOUT
-    pipe = sp.Popen( command, stdin=sp.PIPE, stderr=sp.DEVNULL)
+    pipe = sp.Popen( command, stdin=sp.PIPE, stderr=sp.STDOUT) #sp.DEVNULL)
     return(pipe)
 
 # from here 

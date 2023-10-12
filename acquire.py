@@ -54,7 +54,8 @@ def initialize_and_loop(tuple_list_item, report_period=5): #config, camname, cam
     config, camname, cam, args, experiment, start_t, trigger_with_arduino = tuple_list_item
 
     acquisition_fps=cam['options']['AcquisitionFrameRate']
-
+    videowrite_fps = acquisition_fps if args.videowrite_fps is None else args.videowrite_fos
+        
     # start camera
     if cam['type'] == 'Realsense':
         device = Realsense(serial=cam['serial'], 
@@ -105,7 +106,7 @@ def initialize_and_loop(tuple_list_item, report_period=5): #config, camname, cam
             strobe=cam['strobe'],
             codec=config['codec'],
             acquisition_fps=acquisition_fps, 
-            videowrite_fps = args.videowrite_fps,
+            videowrite_fps = videowrite_fps,
             experiment_duration = args.experiment_duration,
             nframes_per_file=args.nframes_per_file
             )
@@ -121,10 +122,16 @@ def initialize_and_loop(tuple_list_item, report_period=5): #config, camname, cam
     if trigger_with_arduino is True: #cam['master'] in [True, 'True'] and 
          # Set up arduino for trigger
         arduino = initialize_arduino(port=args.port, baudrate=115200)
-        arduino.write(b'S%d\r\n' % int(device.acquisition_fps))
+        #arduino.write(b'S%d\r\n' % int(device.acquisition_fps))
+        cmd = "S{}\r\n".format(int(device.acquisition_fps))
+        arduino.write(cmd.encode())
         #arduino.write(str.encode('S{}'.format(device.acquisition_fps)))
-        print("***Arduino initiated ({} Hz)***".format(int(device.acquisition_fps)))
+        #print(b'S%d\r\n' % int(device.acquisition_fps))
+        print("***Arduino sent: {}***".format(cmd))
         time.sleep(0.5)
+        recv = arduino.readline()
+        print(recv)
+        print("Received FPS {} Hz.".format(recv.rstrip().decode('utf-8')))
         #device.arduino = arduino
         device.start()
         time.sleep(0.5)
@@ -138,25 +145,26 @@ def initialize_and_loop(tuple_list_item, report_period=5): #config, camname, cam
         #return camname, cam['serial']   
     except KeyboardInterrupt:
         print("Aborted in main")
-        if cam['master'] in [True, 'True']:
-            arduino.write(b'Q\r\n')
-            print("Closed Arduino")
+        #if cam['master'] in [True, 'True']:
+        arduino.write("Q\r\n".encode()) #b'Q\r\n')
+        print("Closed Arduino")
     finally:
         #if cam['master'] in [True, 'True']:
-        arduino.write(b'Q\r\n')
-        print("Closed Arduino")
+        print("Closing Arduino")
+        arduino.write("Q\r\n".encode()) #b'Q\r\n')
+        print("Exiting.")
 
     return ("done")
 
 
-def initialize_arduino(port='/dev/ttyACM0', baudrate=115200):
+def initialize_arduino(port='/dev/ttyACM0', baudrate=115200, timeout=5):
     # Set up arduino for trigger
     # p#ort = "/dev/cu.usbmodem145201"
     #port = args.port
     #baudrate = 115200
     #print("# Please specify a port and a baudrate")
     #print("# using hard coded defaults " + port + " " + str(baudrate))
-    arduino = pyserial.Serial(port, baudrate, timeout=0.5)
+    arduino = pyserial.Serial(port, baudrate, timeout=timeout)
     time.sleep(1)
     #flushBuffer()
     sys.stdout.flush()
@@ -199,10 +207,10 @@ def main():
     parser.add_argument('--port', default='/dev/ttyACM0', type=str,
          help='port for arduino (default: /dev/ttyACM0)')
 
-    parser.add_argument('-r', '--acquisition_fps', default=10, type=float,
+    parser.add_argument('-r', '--acquisition_fps', default=30, type=float,
          help='Acquisition frame rate (default: 10 Hz)')
-    parser.add_argument('-w', '--videowrite_fps', default=10, type=float,
-         help='Video save frame rate (default: 10 Hz)')
+    parser.add_argument('-w', '--videowrite_fps', default=None, type=float,
+         help='Video save frame rate (default: acquisition rate)')
     parser.add_argument('-d', '--experiment_duration', default=np.inf, type=float,
          help='Experiment dur in minutes (default: inf.)')
     parser.add_argument('-f', '--nframes_per_file', default=108000, type=int,
@@ -241,12 +249,13 @@ def main():
     print("ARDUINO: ", trigger_with_arduino)
     if trigger_with_arduino or len(config['cams'])>1:
         arduino = initialize_arduino(port=args.port, baudrate=115200)
-        arduino.write(b'Q\r\n') # % args.acquisition_fps)   
+        #arduino.write("Q\r\n".encode()) #b'Q\r\n') # % args.acquisition_fps)   
         print("***Arduino cleared***")
         arduino.close()
 
     #acquisition_fps = args.acquisition_fps
-    videowrite_fps = args.videowrite_fps
+    #if args.videowrite_fps is None:
+    #    args.videowrite_fps = args.acquisition_fps
 
     """
     Originally I wanted to initialize each device, then pass each device to "run_loop" 
